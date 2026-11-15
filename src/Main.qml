@@ -23,8 +23,13 @@ ApplicationWindow {
     Material.roundedScale: theme.radius
 
     property bool helpVisible: false
-    // What to do once the unsaved-changes question is answered: "close" or "open".
+    // The files beside the text: hidden until asked for, unless Plain was
+    // opened on a folder. Not remembered, so as $EDITOR it's one file.
+    property bool sidebarVisible: false
+    // What to do once the unsaved-changes question is answered: "close",
+    // "open", or "openPath" for the file picked in the sidebar.
     property string pendingAction: ""
+    property string pendingPath: ""
     // Set once the user agreed to lose changes, so closing doesn't ask again.
     property bool discardConfirmed: false
 
@@ -83,8 +88,45 @@ ApplicationWindow {
             discardConfirmed = true
             win.close()
         } else if (action === "open") {
-            picker.openFile(doc.path.length > 0 ? doc.path.substring(0, doc.path.lastIndexOf("/")) : "")
+            picker.openFile(doc.path.length > 0 ? folderOf(doc.path) : files.root)
+        } else if (action === "openPath") {
+            discardConfirmed = false
+            doc.open(pendingPath)
+            editor.goToLine(1)
         }
+    }
+
+    function folderOf(path) { return path.substring(0, path.lastIndexOf("/")) || "/" }
+
+    // A file picked in the sidebar, asking first about unsaved changes.
+    function openPath(path) {
+        if (path === doc.path) {
+            editor.focusText()
+            return
+        }
+        pendingPath = path
+        request("openPath")
+    }
+
+    // Shows the files of the folder Plain was opened on, or else the open
+    // file's, with the open file picked out.
+    readonly property string home: StandardPaths.writableLocation(StandardPaths.HomeLocation).toString().replace(/^file:\/\//, "")
+
+    // A path the way the footer shows it, with the home folder as ~.
+    function displayPath(path) { return path.startsWith(home + "/") ? "~" + path.substring(home.length) : path === home ? "~" : path }
+
+    function showSidebar(focusTree) {
+        if (files.root.length === 0)
+            files.root = doc.path.length > 0 ? folderOf(doc.path) : home
+        sidebarVisible = true
+        sidebar.reveal(doc.path)
+        if (focusTree)
+            sidebar.focusTree()
+    }
+
+    function hideSidebar() {
+        sidebarVisible = false
+        editor.focusText()
     }
 
     onClosing: function(close) {
@@ -110,6 +152,24 @@ ApplicationWindow {
     Shortcut { sequences: ["Ctrl+=", "Ctrl++"]; context: Qt.ApplicationShortcut; onActivated: if (win.textSize < 48) settings.zoom += 1 }
     Shortcut { sequence: "Ctrl+-"; context: Qt.ApplicationShortcut; onActivated: if (win.textSize > 8) settings.zoom -= 1 }
     Shortcut { sequence: "Ctrl+0"; context: Qt.ApplicationShortcut; onActivated: settings.zoom = 0 }
+    Shortcut { sequence: "Ctrl+B"; context: Qt.ApplicationShortcut; onActivated: win.sidebarVisible ? win.hideSidebar() : win.showSidebar(false) }
+    Shortcut { sequence: "Ctrl+Shift+E"; context: Qt.ApplicationShortcut; onActivated: win.showSidebar(true) }
+    // With the files showing, a new file named in place where they're at;
+    // otherwise another window, since this one holds one file.
+    Shortcut {
+        sequence: "Ctrl+N"
+        context: Qt.ApplicationShortcut
+        onActivated: win.sidebarVisible ? namePrompt.ask(false) : launcher.newWindow()
+    }
+    Shortcut {
+        sequence: "Ctrl+Shift+N"
+        context: Qt.ApplicationShortcut
+        onActivated: {
+            if (!win.sidebarVisible)
+                win.showSidebar(false)
+            namePrompt.ask(true)
+        }
+    }
     Shortcut { sequences: ["F1", "Ctrl+?"]; context: Qt.ApplicationShortcut; onActivated: win.helpVisible = !win.helpVisible }
     Shortcut { sequence: "Escape"; context: Qt.ApplicationShortcut; enabled: win.helpVisible; onActivated: win.helpVisible = false }
 
@@ -133,6 +193,10 @@ ApplicationWindow {
         if (startPath.length > 0)
             doc.open(startPath)
         editor.goToLine(Math.max(1, startLine))
+        if (startFolder.length > 0) {
+            files.root = startFolder
+            showSidebar(true)
+        }
     }
 
     // Right-to-left languages mirror the chrome; the text keeps its own
@@ -142,48 +206,77 @@ ApplicationWindow {
         LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
         LayoutMirroring.childrenInherit: true
 
-        ColumnLayout {
+        RowLayout {
             anchors.fill: parent
             spacing: 0
 
-            Banner {
-                Layout.fillWidth: true
-                onSaveAsRequested: win.saveAs()
+            Sidebar {
+                id: sidebar
+                objectName: "sidebar"
+                visible: win.sidebarVisible
+                Layout.fillHeight: true
+                Layout.preferredWidth: preferredWidth
+                onOpenRequested: function(path) { win.openPath(path) }
+                onDeleteRequested: function(row) { deleteConfirm.ask(row) }
+                onHideRequested: win.hideSidebar()
                 onDone: editor.focusText()
             }
 
-            Label {
-                id: pickerError
-                Layout.fillWidth: true
-                Layout.margins: 10
-                visible: text.length > 0
-                color: theme.red
-                wrapMode: Text.Wrap
-                MouseArea { anchors.fill: parent; onClicked: pickerError.text = "" }
-            }
-
-            FindBar {
-                id: findBar
-                Layout.fillWidth: true
-                editor: editor
-            }
-
-            EditorView {
-                id: editor
-                objectName: "editorView"
+            ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                fontSize: win.textSize
-                wrap: settings.wrap
-                LayoutMirroring.enabled: false
-                LayoutMirroring.childrenInherit: true
-            }
+                spacing: 0
 
-            Footer {
-                Layout.fillWidth: true
-                onSaveRequested: win.save()
-                onOpenRequested: win.request("open")
-                onHelpRequested: win.helpVisible = !win.helpVisible
+                Banner {
+                    Layout.fillWidth: true
+                    onSaveAsRequested: win.saveAs()
+                    onDone: editor.focusText()
+                }
+
+                Label {
+                    id: pickerError
+                    Layout.fillWidth: true
+                    Layout.margins: 10
+                    visible: text.length > 0
+                    color: theme.red
+                    wrapMode: Text.Wrap
+                    MouseArea { anchors.fill: parent; onClicked: pickerError.text = "" }
+                }
+
+                FindBar {
+                    id: findBar
+                    Layout.fillWidth: true
+                    editor: editor
+                }
+
+                EditorView {
+                    id: editor
+                    objectName: "editorView"
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    fontSize: win.textSize
+                    wrap: settings.wrap
+                    LayoutMirroring.enabled: false
+                    LayoutMirroring.childrenInherit: true
+
+                    // Opened on a folder, nothing is open until a file is picked.
+                    Label {
+                        anchors.centerIn: parent
+                        visible: win.sidebarVisible && doc.path.length === 0 && editor.area.length === 0
+                        text: qsTr("Pick a file")
+                        color: theme.secondaryForeground
+                        opacity: 0.7
+                    }
+                }
+
+                Footer {
+                    Layout.fillWidth: true
+                    sidebarButton: !win.sidebarVisible
+                    onSidebarRequested: win.showSidebar(false)
+                    onSaveRequested: win.save()
+                    onOpenRequested: win.request("open")
+                    onHelpRequested: win.helpVisible = !win.helpVisible
+                }
             }
         }
 
@@ -199,6 +292,202 @@ ApplicationWindow {
         anchors.centerIn: parent
         onAccepted: function(line) { editor.goToLine(line) }
         onClosed: editor.focusText()
+    }
+
+    // A new file or folder's name, asked in the middle like Delete's
+    // question, for where the sidebar's keys are. A file opens once made.
+    Popup {
+        id: namePrompt
+        anchors.centerIn: parent
+        width: Math.min(440, win.width - 48)
+        modal: true
+        focus: true
+        padding: 22
+        Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, 0.55) }
+
+        property bool folder: false
+        property string inFolder: ""
+        property string error: ""
+        // Where the keys go back to: the new folder in the files, the new
+        // file's text, or where they were.
+        property var returnFocus: null
+        property string made: ""
+
+        function ask(folder) {
+            namePrompt.folder = folder
+            returnFocus = win.activeFocusItem
+            made = ""
+            inFolder = sidebar.newItemFolder()
+            error = ""
+            nameField.text = ""
+            open()
+        }
+
+        function create() {
+            const made = files.create(inFolder, nameField.text, folder)
+            if (made.error) {
+                error = made.error
+                nameField.forceActiveFocus()
+                return
+            }
+            namePrompt.made = made.path
+            close()
+        }
+
+        onOpened: nameField.forceActiveFocus()
+        onClosed: {
+            if (made.length === 0) {
+                if (returnFocus)
+                    returnFocus.forceActiveFocus()
+                return
+            }
+            sidebar.reveal(made)
+            if (folder)
+                sidebar.focusTree()
+            else
+                win.openPath(made)
+        }
+
+        background: DialogBackground {}
+
+        contentItem: ColumnLayout {
+            spacing: 12
+            Label {
+                text: namePrompt.folder ? qsTr("New folder") : qsTr("New file")
+                color: theme.brightForeground
+                font.pixelSize: Math.round(theme.textSize * 1.333)
+                font.bold: true
+            }
+            Label {
+                Layout.fillWidth: true
+                text: qsTr("In %1").arg(win.displayPath(namePrompt.inFolder))
+                textFormat: Text.PlainText
+                elide: Text.ElideMiddle
+                color: theme.secondaryForeground
+            }
+            TextField {
+                id: nameField
+                objectName: "newName"
+                Layout.fillWidth: true
+                placeholderText: namePrompt.folder ? qsTr("Folder name") : qsTr("File name")
+                color: theme.brightForeground
+                selectionColor: win.tint(theme.accent, 0.35)
+                onTextEdited: namePrompt.error = ""
+                Keys.onReturnPressed: namePrompt.create()
+                Keys.onEnterPressed: namePrompt.create()
+            }
+            Label {
+                Layout.fillWidth: true
+                visible: namePrompt.error.length > 0
+                text: namePrompt.error
+                textFormat: Text.PlainText
+                color: theme.red
+                wrapMode: Text.Wrap
+            }
+            RowLayout {
+                Layout.alignment: Qt.AlignRight
+                Layout.topMargin: 6
+                spacing: 8
+                DialogButton {
+                    text: qsTr("Cancel")
+                    onClicked: namePrompt.close()
+                }
+                DialogButton {
+                    primary: true
+                    text: qsTr("Create")
+                    onClicked: namePrompt.create()
+                }
+            }
+        }
+    }
+
+    // Delete from the sidebar: what goes, and that it goes to the trash.
+    // Escape cancels; C and D pick, with or without Alt, and Enter deletes.
+    Popup {
+        id: deleteConfirm
+        anchors.centerIn: parent
+        width: Math.min(440, win.width - 48)
+        modal: true
+        focus: true
+        padding: 22
+        Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, 0.55) }
+
+        property int row: -1
+        property string path: ""
+        property string name: ""
+        property bool folder: false
+        // The open file goes with it, so its unsaved changes would too.
+        readonly property bool holdsOpenFile: path.length > 0 && (doc.path === path || doc.path.startsWith(path + "/"))
+
+        function ask(row) {
+            deleteConfirm.row = row
+            path = files.pathAt(row)
+            name = path.substring(path.lastIndexOf("/") + 1)
+            folder = files.isFolder(row)
+            open()
+        }
+
+        function confirm() {
+            close()
+            const affectsDoc = holdsOpenFile
+            const error = files.trash(row)
+            if (error.length > 0) {
+                pickerError.text = qsTr("Couldn't delete %1: %2").arg(name).arg(error)
+            } else if (affectsDoc) {
+                doc.close()
+                win.discardConfirmed = false
+            }
+        }
+
+        onOpened: deleteButton.forceActiveFocus()
+        onClosed: sidebar.focusTree()
+
+        Shortcut { sequences: ["C", "Alt+C"]; enabled: deleteConfirm.opened; onActivated: deleteConfirm.close() }
+        Shortcut { sequences: ["D", "Alt+D"]; enabled: deleteConfirm.opened; onActivated: deleteConfirm.confirm() }
+
+        background: DialogBackground {}
+
+        contentItem: ColumnLayout {
+            spacing: 12
+            Label {
+                Layout.fillWidth: true
+                text: qsTr("Delete %1?").arg(deleteConfirm.name)
+                textFormat: Text.PlainText
+                elide: Text.ElideMiddle
+                color: theme.brightForeground
+                font.pixelSize: Math.round(theme.textSize * 1.333)
+                font.bold: true
+            }
+            Label {
+                Layout.fillWidth: true
+                text: (deleteConfirm.folder
+                       ? qsTr("The folder and everything in it will be moved to the trash.")
+                       : qsTr("The file will be moved to the trash."))
+                      + (deleteConfirm.holdsOpenFile && doc.modified ? " " + qsTr("Unsaved changes to %1 will be lost.").arg(doc.fileName) : "")
+                color: theme.foreground
+                wrapMode: Text.Wrap
+            }
+            RowLayout {
+                Layout.alignment: Qt.AlignRight
+                Layout.topMargin: 14
+                spacing: 8
+                DialogButton {
+                    id: deleteCancelButton
+                    text: qsTr("Cancel")
+                    formattedText: qsTr("<u>C</u>ancel")
+                    KeyNavigation.tab: deleteButton
+                    onClicked: deleteConfirm.close()
+                }
+                DialogButton {
+                    id: deleteButton
+                    primary: true
+                    text: qsTr("Delete")
+                    formattedText: qsTr("<u>D</u>elete")
+                    KeyNavigation.tab: deleteCancelButton
+                    onClicked: deleteConfirm.confirm()
+                }
+            }
+        }
     }
 
     // Unsaved changes: Cancel, Discard, Save, laid out like Omawrite's.
@@ -256,7 +545,7 @@ ApplicationWindow {
             }
             Label {
                 Layout.fillWidth: true
-                text: win.pendingAction === "open"
+                text: win.pendingAction === "open" || win.pendingAction === "openPath"
                     ? qsTr("Save changes to %1 before opening another file?").arg(doc.fileName)
                     : qsTr("Save changes to %1 before closing?").arg(doc.fileName)
                 color: theme.foreground

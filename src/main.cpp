@@ -1,6 +1,7 @@
 // plain — Omarchy's text editor for config files: conventional keys, the
 // theme's colors, and saves that never damage a file.
 
+#include <QFileInfo>
 #include <QFont>
 #include <QGuiApplication>
 #include <QIcon>
@@ -13,11 +14,13 @@
 #include "arguments.h"
 #include "document.h"
 #include "editing.h"
+#include "filetree.h"
+#include "launcher.h"
 #include "portalfilepicker.h"
 #include "theme.h"
 #include "translator.h"
 
-static const char *Usage = "usage: plain [+LINE] [--] [FILE]\n";
+static const char *Usage = "usage: plain [+LINE] [--] [FILE | FOLDER]\n";
 
 int main(int argc, char *argv[]) {
     // Without a display Qt aborts in the constructor, before --help or
@@ -71,6 +74,15 @@ int main(int argc, char *argv[]) {
     document.setTheme(&theme);
     Editing editing(&document);
     PortalFilePicker picker;
+    FileTree files;
+    Launcher launcher;
+
+    // A folder opens in the sidebar, with no file open yet.
+    QString startPath = arguments.path, startFolder;
+    if (!startPath.isEmpty() && QFileInfo(startPath).isDir()) {
+        startFolder = QFileInfo(startPath).absoluteFilePath();
+        startPath.clear();
+    }
 
     QQmlApplicationEngine engine;
     QObject::connect(&translator, &Translator::changed, &engine, &QQmlEngine::retranslate);
@@ -79,7 +91,10 @@ int main(int argc, char *argv[]) {
     engine.rootContext()->setContextProperty("doc", &document);
     engine.rootContext()->setContextProperty("editing", &editing);
     engine.rootContext()->setContextProperty("picker", &picker);
-    engine.rootContext()->setContextProperty("startPath", arguments.path);
+    engine.rootContext()->setContextProperty("files", &files);
+    engine.rootContext()->setContextProperty("launcher", &launcher);
+    engine.rootContext()->setContextProperty("startPath", startPath);
+    engine.rootContext()->setContextProperty("startFolder", startFolder);
     engine.rootContext()->setContextProperty("startLine", arguments.line);
     engine.load(QUrl("qrc:/Main.qml"));
     if (engine.rootObjects().isEmpty())

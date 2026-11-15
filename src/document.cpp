@@ -230,6 +230,35 @@ bool Document::open(const QString &path) {
     return load(false);
 }
 
+void Document::close() {
+    m_debounce.stop();
+    m_path.clear();
+    m_target.clear();
+    forgetDisk();
+    m_bom = m_crlf = false;
+    m_allowLarge = false;
+    m_locked = false;
+    m_editable = true;
+    if (m_document)
+        setText({}, false);
+    m_indentUnit = "    ";
+    watch();
+    setProblem(Problem::None);
+    emit fileChanged();
+    emit modifiedChanged();
+}
+
+void Document::relocate(const QString &path) {
+    if (m_path.isEmpty())
+        return;
+    m_path = QFileInfo(path).absoluteFilePath();
+    m_target = currentTarget();
+    if (!m_diskHash.isEmpty())
+        m_diskStamp = stamp(m_target);
+    watch();
+    emit fileChanged();
+}
+
 // After a reload refused the file, the editor still holds the text and its
 // undo history, so opening it anyway is an undoable reload too.
 void Document::openAnyway() {

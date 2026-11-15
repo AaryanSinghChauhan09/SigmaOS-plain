@@ -5,8 +5,11 @@
 #include <QJsonObject>
 #include <QMap>
 #include <QQmlComponent>
+#include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickItem>
+#include <QQuickStyle>
+#include <QQuickView>
 #include <QQuickTextDocument>
 #include <QRegularExpression>
 #include <QSet>
@@ -25,6 +28,7 @@
 #include "arguments.h"
 #include "document.h"
 #include "editing.h"
+#include "filetree.h"
 #include "portalfilepicker.h"
 #include "highlighter.h"
 #include "theme.h"
@@ -858,6 +862,278 @@ private slots:
         QVERIFY(Arguments::parse({"plain"}).path.isEmpty());
     }
 
+    // The sidebar's files.
+
+    void listsFoldersFirstWithoutDotfiles()
+    {
+        QTemporaryDir dir;
+        QDir(dir.path()).mkpath("b-folder/inner");
+        QDir(dir.path()).mkpath("A-folder");
+        QDir(dir.path()).mkpath(".git");
+        write(dir.filePath("z.conf"), "");
+        write(dir.filePath("a.lua"), "");
+        write(dir.filePath("file10.toml"), "");
+        write(dir.filePath("file9.toml"), "");
+        write(dir.filePath(".hidden"), "");
+        write(dir.filePath("b-folder/inside.conf"), "");
+
+        FileTree tree;
+        tree.setRoot(dir.path());
+        QCOMPARE(names(tree), QStringList({"A-folder", "b-folder", "a.lua", "file9.toml", "file10.toml", "z.conf"}));
+        QVERIFY(tree.isFolder(1));
+        QVERIFY(!tree.isFolder(2));
+        QCOMPARE(tree.data(tree.index(0), FileTree::DepthRole).toInt(), 0);
+    }
+
+    void foldsFoldersOpenAndClosed()
+    {
+        QTemporaryDir dir;
+        QDir(dir.path()).mkpath("hypr/scripts");
+        write(dir.filePath("hypr/bindings.lua"), "");
+        write(dir.filePath("hypr/scripts/run.sh"), "");
+        write(dir.filePath("top.conf"), "");
+
+        FileTree tree;
+        tree.setRoot(dir.path());
+        QCOMPARE(names(tree), QStringList({"hypr", "top.conf"}));
+
+        tree.expand(0);
+        QCOMPARE(names(tree), QStringList({"hypr", "scripts", "bindings.lua", "top.conf"}));
+        QCOMPARE(tree.data(tree.index(2), FileTree::DepthRole).toInt(), 1);
+        QCOMPARE(tree.parentOf(2), 0);
+        QCOMPARE(tree.parentOf(0), -1);
+
+        tree.expand(1);
+        QCOMPARE(names(tree), QStringList({"hypr", "scripts", "run.sh", "bindings.lua", "top.conf"}));
+
+        // Closing a folder closes those inside it, too.
+        tree.toggle(0);
+        QCOMPARE(names(tree), QStringList({"hypr", "top.conf"}));
+        tree.toggle(0);
+        QCOMPARE(names(tree), QStringList({"hypr", "scripts", "bindings.lua", "top.conf"}));
+    }
+
+    void revealsAFileUnderTheRoot()
+    {
+        QTemporaryDir dir;
+        QDir(dir.path()).mkpath("a/b");
+        write(dir.filePath("a/b/deep.conf"), "");
+
+        FileTree tree;
+        tree.setRoot(dir.path());
+        const int row = tree.reveal(dir.filePath("a/b/deep.conf"));
+        QCOMPARE(row, 2);
+        QCOMPARE(tree.pathAt(row), QDir::cleanPath(dir.filePath("a/b/deep.conf")));
+        QCOMPARE(tree.reveal("/etc/hosts"), -1);
+        QCOMPARE(tree.reveal(dir.filePath("a/missing.conf")), -1);
+    }
+
+    void followsTheFolderOnDisk()
+    {
+        QTemporaryDir dir;
+        QDir(dir.path()).mkpath("sub");
+        write(dir.filePath("one.conf"), "");
+
+        FileTree tree;
+        tree.setRoot(dir.path());
+        tree.expand(0);
+        QCOMPARE(names(tree), QStringList({"sub", "one.conf"}));
+
+        write(dir.filePath("sub/new.conf"), "");
+        QTRY_COMPARE(names(tree), QStringList({"sub", "new.conf", "one.conf"}));
+        QFile::remove(dir.filePath("one.conf"));
+        QTRY_COMPARE(names(tree), QStringList({"sub", "new.conf"}));
+    }
+
+    void deletesToTheTrash()
+    {
+        // The trash lives under XDG_DATA_HOME; a temporary one keeps the
+        // test out of the user's.
+        QTemporaryDir dir;
+        const QByteArray dataHome = qgetenv("XDG_DATA_HOME");
+        qputenv("XDG_DATA_HOME", QFile::encodeName(dir.filePath("data")));
+        QDir(dir.path()).mkpath("data");
+        QDir(dir.path()).mkpath("root/folder");
+        write(dir.filePath("root/a.conf"), "a\n");
+        write(dir.filePath("root/folder/b.conf"), "b\n");
+
+        FileTree tree;
+        tree.setRoot(dir.filePath("root"));
+        QCOMPARE(names(tree), QStringList({"folder", "a.conf"}));
+        QCOMPARE(tree.trash(1), QString());
+        QVERIFY(!QFileInfo::exists(dir.filePath("root/a.conf")));
+        QCOMPARE(read(dir.filePath("data/Trash/files/a.conf")), QByteArray("a\n"));
+        QCOMPARE(names(tree), QStringList({"folder"}));
+
+        // A folder goes whole.
+        QCOMPARE(tree.trash(0), QString());
+        QVERIFY(QFileInfo::exists(dir.filePath("data/Trash/files/folder/b.conf")));
+        QCOMPARE(tree.rowCount(), 0);
+        QVERIFY(!tree.trash(0).isEmpty());
+
+        if (dataHome.isNull())
+            qunsetenv("XDG_DATA_HOME");
+        else
+            qputenv("XDG_DATA_HOME", dataHome);
+    }
+
+    void movesIntoFolders()
+    {
+        QTemporaryDir dir;
+        QDir(dir.path()).mkpath("a/inner");
+        QDir(dir.path()).mkpath("b");
+        write(dir.filePath("x.conf"), "x\n");
+        write(dir.filePath("b/x.conf"), "other\n");
+        write(dir.filePath("y.conf"), "y\n");
+
+        FileTree tree;
+        tree.setRoot(dir.path());
+        QCOMPARE(names(tree), QStringList({"a", "b", "x.conf", "y.conf"}));
+
+        // Into a folder, which opens to show it.
+        QCOMPARE(tree.move(3, dir.filePath("a")), QString());
+        QCOMPARE(read(dir.filePath("a/y.conf")), QByteArray("y\n"));
+        QCOMPARE(names(tree), QStringList({"a", "inner", "y.conf", "b", "x.conf"}));
+
+        // Never over something with the same name, or a folder into itself.
+        QVERIFY(!tree.move(4, dir.filePath("b")).isEmpty());
+        QCOMPARE(read(dir.filePath("x.conf")), QByteArray("x\n"));
+        QVERIFY(!tree.move(0, dir.filePath("a/inner")).isEmpty());
+        QVERIFY(!tree.move(0, dir.filePath("a")).isEmpty());
+
+        // A whole folder moves, staying open.
+        QCOMPARE(tree.move(0, dir.filePath("b")), QString());
+        QVERIFY(QFileInfo::exists(dir.filePath("b/a/y.conf")));
+        QCOMPARE(names(tree), QStringList({"b", "a", "inner", "y.conf", "x.conf", "x.conf"}));
+    }
+
+    void createsFilesAndFolders()
+    {
+        QTemporaryDir dir;
+        QDir(dir.path()).mkpath("conf");
+        write(dir.filePath("conf/a.conf"), "a\n");
+        write(dir.filePath("top.lua"), "");
+
+        FileTree tree;
+        tree.setRoot(dir.path());
+        tree.expand(0);
+        QCOMPARE(names(tree), QStringList({"conf", "a.conf", "top.lua"}));
+        // Into a folder, beside a file, or at the top with no row.
+        const QString conf = QDir::cleanPath(dir.filePath("conf"));
+        QCOMPARE(tree.folderAt(0), conf);
+        QCOMPARE(tree.folderAt(1), conf);
+        QCOMPARE(tree.folderAt(2), QDir::cleanPath(dir.path()));
+        QCOMPARE(tree.folderAt(-1), QDir::cleanPath(dir.path()));
+
+        // Never over what's there, and only a plain name.
+        QVERIFY(tree.create(conf, "a.conf", false).contains("error"));
+        QCOMPARE(read(dir.filePath("conf/a.conf")), QByteArray("a\n"));
+        QVERIFY(tree.create(conf, "", false).contains("error"));
+        QVERIFY(tree.create(conf, "x/y", false).contains("error"));
+        QVERIFY(tree.create(conf, "..", true).contains("error"));
+
+        QCOMPARE(tree.create(conf, "new.conf", false).value("path").toString(), conf + "/new.conf");
+        QVERIFY(QFileInfo(dir.filePath("conf/new.conf")).isFile());
+        QCOMPARE(tree.create(conf, "sub", true).value("path").toString(), conf + "/sub");
+        QVERIFY(QFileInfo(dir.filePath("conf/sub")).isDir());
+        QCOMPARE(names(tree), QStringList({"conf", "sub", "a.conf", "new.conf", "top.lua"}));
+    }
+
+    void followsAMovedFile()
+    {
+        QTemporaryDir dir;
+        QDir(dir.path()).mkpath("into");
+        write(dir.filePath("x.lua"), "-- x\n");
+        QTextDocument text;
+        Document doc;
+        doc.attachDocument(&text);
+        QVERIFY(doc.open(dir.filePath("x.lua")));
+        append(&text, "edit\n");
+
+        QVERIFY(QDir().rename(dir.filePath("x.lua"), dir.filePath("into/x.lua")));
+        doc.relocate(dir.filePath("into/x.lua"));
+        QCOMPARE(doc.path(), dir.filePath("into/x.lua"));
+        QVERIFY(doc.modified());
+        QVERIFY(doc.save());
+        QCOMPARE(read(dir.filePath("into/x.lua")), QByteArray("-- x\nedit\n"));
+        QVERIFY(!QFileInfo::exists(dir.filePath("x.lua")));
+    }
+
+    // The sidebar itself, offscreen: a row dragged onto a folder moves into
+    // it, and the open file follows with its edits.
+    void dragsFilesIntoFolders()
+    {
+        QTemporaryDir dir;
+        QDir(dir.path()).mkpath("root/folder");
+        write(dir.filePath("root/a.conf"), "a\n");
+        write(dir.filePath("root/b.conf"), "b\n");
+        write(dir.filePath("Harness.qml"),
+              "import QtQuick\nimport \"file://" + QFile::encodeName(sourceFolder()) + "\"\n"
+              "Item { id: win; width: 300; height: 400\n"
+              "  function tint(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }\n"
+              "  Sidebar { objectName: \"sidebar\"; anchors.fill: parent } }\n");
+
+        QQuickStyle::setStyle("Material");
+        Theme theme(dir.path());
+        FileTree tree;
+        tree.setRoot(dir.filePath("root"));
+        QTextDocument text;
+        Document doc;
+        doc.attachDocument(&text);
+        QVERIFY(doc.open(dir.filePath("root/a.conf")));
+        append(&text, "edit\n");
+
+        QQuickView view;
+        view.engine()->rootContext()->setContextProperty("theme", &theme);
+        view.engine()->rootContext()->setContextProperty("doc", &doc);
+        view.engine()->rootContext()->setContextProperty("files", &tree);
+        view.setSource(QUrl::fromLocalFile(dir.filePath("Harness.qml")));
+        QVERIFY2(view.status() == QQuickView::Ready, qPrintable(view.errors().isEmpty() ? QString() : view.errors().first().toString()));
+        view.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&view));
+        QCOMPARE(names(tree), QStringList({"folder", "a.conf", "b.conf"}));
+
+        // Rows start 13px down, each twice the text size high.
+        const int rowHeight = qRound(theme.textSize() * 2.0);
+        auto centerOf = [&](int row) { return QPoint(60, 13 + row * rowHeight + rowHeight / 2); };
+        QTest::mousePress(&view, Qt::LeftButton, {}, centerOf(1));
+        for (int step = 1; step <= 10; ++step) {
+            const QPoint at = centerOf(1) + (centerOf(0) - centerOf(1)) * step / 10;
+            QMouseEvent move(QEvent::MouseMove, at, view.mapToGlobal(at), Qt::NoButton, Qt::LeftButton, {});
+            QGuiApplication::sendEvent(&view, &move);
+            QTest::qWait(10);
+        }
+        QTest::mouseRelease(&view, Qt::LeftButton, {}, centerOf(0));
+
+        QTRY_VERIFY(QFileInfo::exists(dir.filePath("root/folder/a.conf")));
+        QVERIFY(!QFileInfo::exists(dir.filePath("root/a.conf")));
+        QCOMPARE(doc.path(), dir.filePath("root/folder/a.conf"));
+        QVERIFY(doc.modified());
+        QCOMPARE(names(tree), QStringList({"folder", "a.conf", "b.conf"}));
+        QCOMPARE(tree.pathAt(1), QDir::cleanPath(dir.filePath("root/folder/a.conf")));
+    }
+
+    void closesToAnEmptyDocument()
+    {
+        QTemporaryDir dir;
+        write(dir.filePath("x.lua"), "-- x\n");
+        QTextDocument text;
+        Document doc;
+        doc.attachDocument(&text);
+        QVERIFY(doc.open(dir.filePath("x.lua")));
+        append(&text, "more\n");
+        QVERIFY(doc.modified());
+
+        QSignalSpy changed(&doc, &Document::fileChanged);
+        doc.close();
+        QCOMPARE(changed.count(), 1);
+        QVERIFY(doc.path().isEmpty());
+        QVERIFY(text.toPlainText().isEmpty());
+        QVERIFY(!doc.modified());
+        QVERIFY(doc.editable());
+        QCOMPARE(doc.problem(), QString("None"));
+    }
+
     // Languages and highlighting.
 
     void picksLanguages()
@@ -1174,6 +1450,14 @@ private:
     {
         write(path + ".tmp", contents);
         QVERIFY(::rename(QFile::encodeName(path + ".tmp").constData(), QFile::encodeName(path).constData()) == 0);
+    }
+
+    static QStringList names(const FileTree &tree)
+    {
+        QStringList names;
+        for (int i = 0; i < tree.rowCount(); ++i)
+            names << tree.data(tree.index(i), FileTree::NameRole).toString();
+        return names;
     }
 
     static QByteArray read(const QString &path)

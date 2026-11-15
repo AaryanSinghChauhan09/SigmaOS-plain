@@ -1099,6 +1099,42 @@ private slots:
         QCOMPARE(names(tree), QStringList({"conf", "sub", "a.conf", "new.conf", "top.lua"}));
     }
 
+    void renamesAndDuplicates()
+    {
+        QTemporaryDir dir;
+        QDir(dir.path()).mkpath("conf/inner");
+        write(dir.filePath("conf/a.conf"), "a\n");
+        write(dir.filePath("conf/inner/x.lua"), "x\n");
+        write(dir.filePath("b.lua"), "b\n");
+        write(dir.filePath(".zshrc"), "z\n");
+
+        FileTree tree;
+        tree.setRoot(dir.path());
+        tree.expand(0);
+        tree.expand(1);
+        QCOMPARE(names(tree), QStringList({"conf", "inner", "x.lua", "a.conf", "b.lua"}));
+
+        // A folder keeps its open folders under the new name.
+        const QString conf = QDir::cleanPath(dir.filePath("conf"));
+        QCOMPARE(tree.rename(conf, "configs").value("path").toString(), QDir::cleanPath(dir.filePath("configs")));
+        QCOMPARE(names(tree), QStringList({"configs", "inner", "x.lua", "a.conf", "b.lua"}));
+        // Never over another, and only a plain name.
+        QVERIFY(tree.rename(dir.filePath("b.lua"), "configs").contains("error"));
+        QVERIFY(tree.rename(dir.filePath("b.lua"), "x/y").contains("error"));
+        QCOMPARE(tree.rename(dir.filePath("b.lua"), "b.lua").value("path").toString(), QDir::cleanPath(dir.filePath("b.lua")));
+
+        // Copies beside it, numbered past the first.
+        QCOMPARE(tree.duplicate(dir.filePath("b.lua")).value("path").toString(), QDir::cleanPath(dir.filePath("b copy.lua")));
+        QCOMPARE(tree.duplicate(dir.filePath("b.lua")).value("path").toString(), QDir::cleanPath(dir.filePath("b copy 2.lua")));
+        QCOMPARE(read(dir.filePath("b copy 2.lua")), QByteArray("b\n"));
+        QCOMPARE(tree.duplicate(dir.filePath(".zshrc")).value("path").toString(), QDir::cleanPath(dir.filePath(".zshrc copy")));
+        // A folder whole.
+        QCOMPARE(tree.duplicate(dir.filePath("configs")).value("path").toString(), QDir::cleanPath(dir.filePath("configs copy")));
+        QCOMPARE(read(dir.filePath("configs copy/inner/x.lua")), QByteArray("x\n"));
+        QCOMPARE(read(dir.filePath("configs/inner/x.lua")), QByteArray("x\n"));
+        QVERIFY(tree.duplicate(dir.filePath("missing")).contains("error"));
+    }
+
     void followsAMovedFile()
     {
         QTemporaryDir dir;
@@ -1181,10 +1217,10 @@ private slots:
             write(dir.filePath(QString("root/") + name), "");
         write(dir.filePath("Harness.qml"),
               "import QtQuick\nimport \"file://" + QFile::encodeName(sourceFolder()) + "\"\n"
-              "Item { id: win; width: 300; height: 400; property int asked: -1\n"
+              "Item { id: win; width: 300; height: 400; property string asked\n"
               "  function tint(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }\n"
               "  Sidebar { id: bar; objectName: \"sidebar\"; anchors.fill: parent\n"
-              "    onDeleteRequested: function(row) { win.asked = row } }\n"
+              "    onDeleteRequested: function(path) { win.asked = path } }\n"
               "  Component.onCompleted: bar.focusTree() }\n");
 
         Theme theme(dir.path());
@@ -1215,7 +1251,7 @@ private slots:
         QTest::keyClick(&view, Qt::Key_I);
         QTRY_COMPARE(sidebar->property("currentPath").toString(), QDir::cleanPath(dir.filePath("root/input.lua")));
         pressDelete(&view);
-        QCOMPARE(view.rootObject()->property("asked").toInt(), 3);
+        QCOMPARE(view.rootObject()->property("asked").toString(), QDir::cleanPath(dir.filePath("root/input.lua")));
         QVERIFY(QFileInfo::exists(dir.filePath("root/input.lua")));
     }
 
@@ -1314,9 +1350,9 @@ private slots:
         QVERIFY(plain.editorFocused());
     }
 
-    // Space opens a file and keeps the keys in the files, even when the
-    // open file's unsaved changes are asked about first.
-    void spaceOpensAndStaysAfterTheUnsavedQuestion()
+    // Opening another file from the files asks about unsaved changes
+    // first, and the question has the keys.
+    void openingFromTheFilesAsksAboutUnsavedChanges()
     {
         PlainWindow plain;
         QVERIFY(plain.load("root/b.conf", ""));
@@ -1325,13 +1361,13 @@ private slots:
         plain.key(Qt::Key_B, Qt::ControlModifier);
         QTRY_VERIFY(plain.sidebar()->property("treeFocused").toBool());
         plain.key(Qt::Key_A);
-        plain.key(Qt::Key_Space);
+        plain.key(Qt::Key_Return);
         QTRY_VERIFY(plain.item("unsaved")->property("opened").toBool());
-        // The question has the keys: Enter saves.
+        // Enter saves.
         plain.key(Qt::Key_Return);
         QTRY_COMPARE(plain.doc.path(), plain.path("root/a.conf"));
         QCOMPARE(read(plain.path("root/b.conf")), QByteArray("xb\n"));
-        QTRY_VERIFY(plain.sidebar()->property("treeFocused").toBool());
+        QTRY_VERIFY(plain.editorFocused());
     }
 
     // Ctrl+H: hidden files in the files, find and replace in the text.
@@ -1353,6 +1389,46 @@ private slots:
         plain.key(Qt::Key_H, Qt::ControlModifier);
         QVERIFY(plain.files.showHidden());
         QTRY_VERIFY(plain.item("findBar")->property("visible").toBool());
+    }
+
+    // F2 renames, and the open file follows with its edits.
+    void f2RenamesAndTheOpenFileFollows()
+    {
+        PlainWindow plain;
+        QVERIFY(plain.load("root/b.conf", ""));
+        plain.type("x");
+        plain.key(Qt::Key_B, Qt::ControlModifier);
+        QTRY_VERIFY(plain.sidebar()->property("treeFocused").toBool());
+        plain.key(Qt::Key_F2);
+        QTRY_VERIFY(plain.item("namePrompt")->property("opened").toBool());
+        // Typing replaces the name before the extension.
+        plain.type("c");
+        plain.key(Qt::Key_Return);
+        QTRY_COMPARE(plain.doc.path(), plain.path("root/c.conf"));
+        QVERIFY(!QFileInfo::exists(plain.path("root/b.conf")));
+        QVERIFY(plain.doc.modified());
+        plain.key(Qt::Key_S, Qt::ControlModifier);
+        QTRY_COMPARE(read(plain.path("root/c.conf")), QByteArray("xb\n"));
+        QTRY_VERIFY(plain.sidebar()->property("treeFocused").toBool());
+    }
+
+    // Alt+Enter opens the row's menu: Rename, Duplicate, Delete.
+    void altEnterOpensTheRowMenu()
+    {
+        PlainWindow plain;
+        QVERIFY(plain.load("", "root"));
+        QTRY_VERIFY(plain.sidebar()->property("treeFocused").toBool());
+        plain.key(Qt::Key_A);
+        plain.key(Qt::Key_Return, Qt::AltModifier);
+        QTRY_VERIFY(plain.item("rowMenu")->property("opened").toBool());
+        // Down to Duplicate.
+        plain.key(Qt::Key_Down);
+        plain.key(Qt::Key_Down);
+        plain.key(Qt::Key_Return);
+        QTRY_VERIFY(QFileInfo::exists(plain.path("root/a copy.conf")));
+        QTRY_VERIFY(!plain.item("rowMenu")->property("opened").toBool());
+        QTRY_COMPARE(plain.sidebar()->property("currentPath").toString(), plain.path("root/a copy.conf"));
+        QTRY_VERIFY(plain.sidebar()->property("treeFocused").toBool());
     }
 
     void anUntitledDocumentNeverAsksForAFile()

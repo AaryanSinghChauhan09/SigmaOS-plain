@@ -6,6 +6,8 @@
 #include <QFileInfo>
 #include <QRegularExpression>
 #include <algorithm>
+#include <filesystem>
+#include <system_error>
 
 // A name in a folder, right at the root too ("/" + "etc", not "//etc").
 static QString joined(const QString &folder, const QString &name) {
@@ -259,8 +261,7 @@ QVariantMap FileTree::move(const QString &source, const QString &folder) {
     const QString to = joined(into, name);
     if (!QDir().rename(from, to))
         return {{"error", tr("%1 couldn't be moved there").arg(name)}};
-    if (m_expanded.remove(from))
-        m_expanded.insert(to);
+    followExpanded(from, to);
     if (into != m_root)
         m_expanded.insert(into);
     m_debounce.stop();
@@ -304,4 +305,56 @@ int FileTree::find(const QString &prefix, int from) const {
             return row;
     }
     return -1;
+}
+
+void FileTree::followExpanded(const QString &from, const QString &to) {
+    QSet<QString> expanded;
+    for (const QString &folder : std::as_const(m_expanded))
+        expanded << (folder == from ? to : folder.startsWith(from + "/") ? to + folder.mid(from.size()) : folder);
+    m_expanded = expanded;
+}
+
+QVariantMap FileTree::rename(const QString &source, const QString &name) {
+    const QString from = cleaned(source);
+    if (source.isEmpty() || !inTree(from) || !(QFileInfo::exists(from) || QFileInfo(from).isSymLink()))
+        return {{"error", tr("Nothing to rename")}};
+    if (name == QFileInfo(from).fileName())
+        return {{"path", from}};
+    const QString folder = QFileInfo(from).absolutePath();
+    if (const QString problem = nameProblem(folder, name); !problem.isEmpty())
+        return {{"error", problem}};
+    const QString to = joined(folder, name);
+    if (!QDir().rename(from, to))
+        return {{"error", tr("%1 couldn't be renamed").arg(QFileInfo(from).fileName())}};
+    followExpanded(from, to);
+    m_debounce.stop();
+    rebuild();
+    return {{"path", to}};
+}
+
+QVariantMap FileTree::duplicate(const QString &source) {
+    const QString from = cleaned(source);
+    const QFileInfo info(from);
+    if (source.isEmpty() || !inTree(from) || !(info.exists() || info.isSymLink()))
+        return {{"error", tr("Nothing to duplicate")}};
+    // "bindings.lua" becomes "bindings copy.lua"; a folder or a dotfile
+    // keeps its whole name before " copy".
+    const QString name = info.fileName();
+    const qsizetype dot = info.isDir() ? -1 : name.lastIndexOf('.');
+    const QString stem = dot > 0 ? name.left(dot) : name;
+    const QString suffix = dot > 0 ? name.mid(dot) : QString();
+    QString to;
+    for (int n = 1; to.isEmpty() || QFileInfo::exists(to) || QFileInfo(to).isSymLink(); ++n)
+        to = joined(info.absolutePath(), stem + (n == 1 ? tr(" copy") : tr(" copy %1").arg(n)) + suffix);
+    // Never over anything: copy refuses an existing name. Links inside a
+    // folder are copied as links.
+    std::error_code error;
+    std::filesystem::copy(QFile::encodeName(from).constData(), QFile::encodeName(to).constData(),
+                          std::filesystem::copy_options::recursive | std::filesystem::copy_options::copy_symlinks,
+                          error);
+    if (error)
+        return {{"error", tr("%1 couldn't be duplicated: %2").arg(name, QString::fromLocal8Bit(error.message().c_str()))}};
+    m_debounce.stop();
+    rebuild();
+    return {{"path", to}};
 }

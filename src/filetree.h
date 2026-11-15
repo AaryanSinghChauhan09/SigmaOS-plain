@@ -53,6 +53,12 @@ public:
     // {path} where it went or {error}: something there already has its
     // name, or a folder can't go inside itself.
     Q_INVOKABLE QVariantMap move(const QString &path, const QString &folder);
+    // Gives a file or folder in the tree a new name in the same folder,
+    // never over another; {path} or {error}.
+    Q_INVOKABLE QVariantMap rename(const QString &path, const QString &name);
+    // A copy beside it, "name copy.ext" (then "copy 2" and on), a folder
+    // with everything in it; {path} or {error}.
+    Q_INVOKABLE QVariantMap duplicate(const QString &path);
 
     // Where a new file or folder goes from a row: into the folder at it, or
     // beside the file at it, or the root with no row.
@@ -82,6 +88,8 @@ private:
     void rebuild();
     // Under the root, as a clean absolute path; the root itself isn't.
     bool inTree(const QString &clean) const;
+    // Open folders at or under `from` stay open at `to` after a move.
+    void followExpanded(const QString &from, const QString &to);
     void rewatch();
 
     QString m_root;

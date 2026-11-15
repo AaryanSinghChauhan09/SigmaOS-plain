@@ -31,10 +31,12 @@ Plain runs in the foreground and exits when its window closes, so it works as `$
 The sidebar shows a folder's files: the folder Plain was opened on, or the open file's. It's hidden until Ctrl+B or the icon at the left of the footer shows it, and opening Plain on a folder starts with it shown. Folders come first, and the list follows the disk as files come and go. Hidden files stay out of the way until Ctrl+H in the files shows them, and show from the start when the folder is inside a hidden one, like `~/.config/hypr`.
 
 - **Click a file, or Enter on it**, to open it. Unsaved changes are asked about first, as with Ctrl+O.
-- **Keys**: Ctrl+B shows the files with the keys on the open file, and hides them again; Ctrl+Tab hops between files and text, to keep the files open while editing. In the files, Up/Down, Page Up/Down, Home and End move; Right and Left open and close folders; typing a name's first letters jumps to it; Enter opens a file and goes to the text, Space opens it and stays; Escape goes back to the text.
+- **Keys**: Ctrl+B shows the files with the keys on the open file, and hides them again; Ctrl+Tab hops between files and text, to keep the files open while editing. In the files, Up/Down, Page Up/Down, Home and End move; Right and Left open and close folders; typing a name's first letters jumps to it; Enter opens a file and goes to the text; Escape goes back to the text.
 - **Drag a file or folder onto a folder** to move it there. The open file follows, edits and all.
 - **Ctrl+N** names a new file where the sidebar's keys are and opens it; **Ctrl+Shift+N** names a new folder. Without the sidebar, Ctrl+N opens a new window.
 - **Delete** asks, then moves the file or folder to the trash, so it can be had back.
+- **F2** renames; the open file follows, edits and all.
+- **Right-click, or Alt+Enter**, for Rename, Duplicate and Delete. Duplicate puts "name copy.ext" beside it, a folder with everything in it.
 
 ## Keyboard
 
@@ -48,6 +50,8 @@ The sidebar shows a folder's files: the folder Plain was opened on, or the open 
 | Ctrl+B | Show files, with the keys in them, or hide them |
 | Ctrl+Tab | Between the files and the text, while the files show |
 | Delete | Move the picked file to the trash, after asking |
+| F2 | Rename the picked file |
+| Alt+Enter | Rename, duplicate or delete the picked file |
 | Ctrl+Z / Ctrl+Shift+Z | Undo / redo |
 | Ctrl+F | Find |
 | Ctrl+H | Find and replace; in the files, show or hide hidden files |

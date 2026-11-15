@@ -30,8 +30,6 @@ ApplicationWindow {
     // "open", or "openPath" for the file picked in the sidebar.
     property string pendingAction: ""
     property string pendingPath: ""
-    // Whether the keys go back to the files once pendingPath is open.
-    property bool pendingStay: false
     // Set once the user agreed to lose changes, so closing doesn't ask again.
     property bool discardConfirmed: false
 
@@ -95,20 +93,17 @@ ApplicationWindow {
             discardConfirmed = false
             doc.open(pendingPath)
             editor.goToLine(1)
-            if (pendingStay)
-                sidebar.focusTree()
         }
     }
 
     function folderOf(path) { return path.substring(0, path.lastIndexOf("/")) || "/" }
 
     // A file picked in the sidebar, asking first about unsaved changes.
-    function openPath(path, stay) {
+    function openPath(path) {
         if (path === doc.path) {
-            stay ? sidebar.focusTree() : editor.focusText()
+            editor.focusText()
             return
         }
-        pendingStay = !!stay
         pendingPath = path
         request("openPath")
     }
@@ -236,8 +231,10 @@ ApplicationWindow {
                 visible: win.sidebarVisible
                 Layout.fillHeight: true
                 Layout.preferredWidth: preferredWidth
-                onOpenRequested: function(path, stay) { win.openPath(path, stay) }
-                onDeleteRequested: function(row) { deleteConfirm.ask(row) }
+                onOpenRequested: function(path) { win.openPath(path) }
+                onProblem: function(message) { pickerError.text = message }
+                onDeleteRequested: function(path) { deleteConfirm.ask(path) }
+                onRenameRequested: function(path) { namePrompt.askRename(path) }
                 onHideRequested: win.hideSidebar()
                 onDone: editor.focusText()
             }
@@ -334,6 +331,8 @@ ApplicationWindow {
         exit: Transition {}
 
         property bool folder: false
+        // Renaming this path, rather than making something new.
+        property string renaming: ""
         property string inFolder: ""
         property string error: ""
         // Where the keys go back to: the new folder in the files, the new
@@ -343,6 +342,7 @@ ApplicationWindow {
 
         function ask(folder) {
             namePrompt.folder = folder
+            renaming = ""
             returnFocus = win.activeFocusItem
             made = ""
             inFolder = sidebar.newItemFolder()
@@ -351,18 +351,40 @@ ApplicationWindow {
             open()
         }
 
+        // Filled in with the name, its part before the extension selected.
+        function askRename(path) {
+            renaming = path
+            folder = files.isFolder(files.indexOf(path))
+            returnFocus = win.activeFocusItem
+            made = ""
+            inFolder = win.folderOf(path)
+            error = ""
+            nameField.text = path.substring(path.lastIndexOf("/") + 1)
+            open()
+        }
+
         function create() {
-            const made = files.create(inFolder, nameField.text, folder)
+            const made = renaming.length > 0
+                ? files.rename(renaming, nameField.text)
+                : files.create(inFolder, nameField.text, folder)
             if (made.error) {
                 error = made.error
                 nameField.forceActiveFocus()
                 return
             }
+            // The open file follows a rename, edits and all.
+            if (renaming.length > 0 && made.path !== renaming
+                    && (doc.path === renaming || doc.path.startsWith(renaming + "/")))
+                doc.relocate(renaming, made.path)
             namePrompt.made = made.path
             close()
         }
 
-        onOpened: nameField.forceActiveFocus()
+        onOpened: {
+            nameField.forceActiveFocus()
+            const dot = folder ? -1 : nameField.text.lastIndexOf(".")
+            nameField.select(0, dot > 0 ? dot : nameField.text.length)
+        }
         onClosed: {
             if (made.length === 0) {
                 if (returnFocus)
@@ -370,7 +392,7 @@ ApplicationWindow {
                 return
             }
             sidebar.reveal(made)
-            if (folder)
+            if (folder || renaming.length > 0)
                 sidebar.focusTree()
             else
                 win.openPath(made)
@@ -381,7 +403,8 @@ ApplicationWindow {
         contentItem: ColumnLayout {
             spacing: 12
             Label {
-                text: namePrompt.folder ? qsTr("New folder") : qsTr("New file")
+                text: namePrompt.renaming.length > 0 ? qsTr("Rename")
+                    : namePrompt.folder ? qsTr("New folder") : qsTr("New file")
                 color: theme.brightForeground
                 font.pixelSize: Math.round(theme.textSize * 1.333)
                 font.bold: true
@@ -421,7 +444,7 @@ ApplicationWindow {
                 }
                 DialogButton {
                     primary: true
-                    text: qsTr("Create")
+                    text: namePrompt.renaming.length > 0 ? qsTr("Rename") : qsTr("Create")
                     onClicked: namePrompt.create()
                 }
             }
@@ -450,10 +473,10 @@ ApplicationWindow {
         // The open file goes with it, so its unsaved changes would too.
         readonly property bool holdsOpenFile: path.length > 0 && (doc.path === path || doc.path.startsWith(path + "/"))
 
-        function ask(row) {
-            path = files.pathAt(row)
+        function ask(path) {
+            deleteConfirm.path = path
             name = path.substring(path.lastIndexOf("/") + 1)
-            folder = files.isFolder(row)
+            folder = files.isFolder(files.indexOf(path))
             open()
         }
 

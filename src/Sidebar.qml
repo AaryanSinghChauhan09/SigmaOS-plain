@@ -11,10 +11,12 @@ import QtQuick.Layouts
 Rectangle {
     id: sidebar
 
-    // A file to open, and whether the keys stay in the tree once it's open.
-    signal openRequested(string path, bool stay)
-    // Delete on a row: Main asks first.
-    signal deleteRequested(int row)
+    signal openRequested(string path)
+    // Why something asked of the files didn't happen, for Main to show.
+    signal problem(string message)
+    // Delete and Rename: Main asks first, and names.
+    signal deleteRequested(string path)
+    signal renameRequested(string path)
     signal hideRequested()
     // Escape: back to the text.
     signal done()
@@ -54,8 +56,7 @@ Rectangle {
     function moveInto(from, folder) {
         const moved = files.move(from, folder)
         if (moved.error) {
-            moveError.text = moved.error
-            moveError.visible = true
+            sidebar.problem(moved.error)
             return
         }
         if (moved.path !== from)
@@ -63,9 +64,26 @@ Rectangle {
         reveal(moved.path)
     }
 
-    // A folder folds open or closed; a file opens. Opened with Space, the
-    // keys stay in the tree to look at the next one.
-    function activate(row, stay) {
+    function duplicate(path) {
+        const made = files.duplicate(path)
+        if (made.error)
+            sidebar.problem(made.error)
+        else
+            reveal(made.path)
+    }
+
+    // Rename, Duplicate and Delete for a row: right-click, or Alt+Return
+    // (or the menu key) in the files, which puts it below the row.
+    function openMenu(row, item, x, y) {
+        if (row < 0)
+            return
+        list.currentIndex = row
+        rowMenu.path = files.pathAt(row)
+        rowMenu.popup(item, x, y)
+    }
+
+    // A folder folds open or closed; a file opens.
+    function activate(row) {
         if (row < 0)
             return
         list.currentIndex = row
@@ -73,7 +91,7 @@ Rectangle {
             files.toggle(row)
             focusTree()
         } else {
-            sidebar.openRequested(files.pathAt(row), stay)
+            sidebar.openRequested(files.pathAt(row))
         }
     }
 
@@ -160,11 +178,15 @@ Rectangle {
                         files.collapse(row)
                     else if (files.parentOf(row) >= 0)
                         list.currentIndex = files.parentOf(row)
+                } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && (event.modifiers & Qt.AltModifier)
+                           || event.key === Qt.Key_Menu) {
+                    if (list.currentItem)
+                        sidebar.openMenu(row, list.currentItem, 24, list.currentItem.height)
                 } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                    sidebar.activate(row, false)
-                } else if (event.key === Qt.Key_Space) {
-                    sidebar.typed = ""
-                    sidebar.activate(row, true)
+                    sidebar.activate(row)
+                } else if (event.key === Qt.Key_F2) {
+                    if (row >= 0)
+                        sidebar.renameRequested(files.pathAt(row))
                 } else if (event.key === Qt.Key_Home) {
                     list.currentIndex = 0
                 } else if (event.key === Qt.Key_End) {
@@ -174,7 +196,7 @@ Rectangle {
                     list.currentIndex = Math.max(0, Math.min(list.count - 1, row + (event.key === Qt.Key_PageUp ? -page : page)))
                 } else if (event.key === Qt.Key_Delete) {
                     if (row >= 0)
-                        sidebar.deleteRequested(row)
+                        sidebar.deleteRequested(files.pathAt(row))
                 } else if (/^[^\x00-\x20\x7f]+$/.test(event.text)
                            && !(event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier))) {
                     // Printable letters only: Delete and Backspace carry
@@ -280,10 +302,16 @@ Rectangle {
                     id: hover
                     anchors.fill: parent
                     hoverEnabled: true
-                    onClicked: sidebar.activate(row.index, false)
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    onClicked: function(mouse) {
+                        if (mouse.button === Qt.RightButton)
+                            sidebar.openMenu(row.index, row, mouse.x, mouse.y)
+                        else
+                            sidebar.activate(row.index)
+                    }
 
                     // Dragged onto a folder (or a file in one) to move there.
-                    drag.target: dragProxy
+                    drag.target: pressedButtons & Qt.LeftButton ? dragProxy : null
                     drag.threshold: 6
                     onPressed: function(mouse) {
                         const at = row.mapToItem(sidebar, 0, 0)
@@ -337,6 +365,62 @@ Rectangle {
         }
     }
 
+    // A menu item the size of a row in the files, rather than Material's
+    // touch-sized one.
+    component RowMenuItem: MenuItem {
+        id: menuItem
+        property string shortcut
+        implicitHeight: Math.round(theme.textSize * 2.2)
+        leftPadding: 12
+        rightPadding: 12
+        topPadding: 0
+        bottomPadding: 0
+        verticalPadding: 0
+        contentItem: RowLayout {
+            Label {
+                Layout.fillWidth: true
+                text: menuItem.text
+                color: menuItem.highlighted ? theme.brightForeground : theme.foreground
+            }
+            Label {
+                text: menuItem.shortcut
+                color: theme.secondaryForeground
+            }
+        }
+        background: Rectangle {
+            color: menuItem.highlighted ? win.tint(theme.accent, 0.22) : "transparent"
+        }
+    }
+
+    Menu {
+        id: rowMenu
+        objectName: "rowMenu"
+        property string path: ""
+        width: 200
+        topPadding: 4
+        bottomPadding: 4
+        // There and gone at once: Plain animates nothing.
+        enter: Transition {}
+        exit: Transition {}
+        background: DialogBackground {}
+        // After the menu is gone, so a dialog it opens keeps the keys.
+        onClosed: sidebar.focusTree()
+        RowMenuItem {
+            text: qsTr("Rename")
+            shortcut: "F2"
+            onTriggered: Qt.callLater(sidebar.renameRequested, rowMenu.path)
+        }
+        RowMenuItem {
+            text: qsTr("Duplicate")
+            onTriggered: Qt.callLater(sidebar.duplicate, rowMenu.path)
+        }
+        RowMenuItem {
+            text: qsTr("Delete")
+            shortcut: qsTr("Delete")
+            onTriggered: Qt.callLater(sidebar.deleteRequested, rowMenu.path)
+        }
+    }
+
     // What's being dragged, following the pointer.
     Rectangle {
         id: dragProxy
@@ -369,23 +453,6 @@ Rectangle {
                 color: theme.brightForeground
             }
         }
-    }
-
-    // Why a drop didn't move anything, until the next click.
-    Label {
-        id: moveError
-        visible: false
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.margins: 10
-        anchors.bottomMargin: 40
-        padding: 8
-        wrapMode: Text.Wrap
-        color: theme.red
-        background: Rectangle { color: theme.background; radius: 3 }
-        MouseArea { anchors.fill: parent; onClicked: moveError.visible = false }
-        Timer { running: moveError.visible; interval: 4000; onTriggered: moveError.visible = false }
     }
 
     // The line between it and the text, and the edge that resizes it.

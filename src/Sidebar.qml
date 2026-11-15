@@ -154,7 +154,7 @@ Rectangle {
                     positionViewAtIndex(currentIndex, ListView.Contain)
             }
 
-            ScrollBar.vertical: ThinScrollBar { ratio: list.visibleArea.heightRatio }
+            ScrollBar.vertical: ThinScrollBar { id: listBar; ratio: list.visibleArea.heightRatio }
 
             // Dropped below the rows: into the top folder.
             DropArea {
@@ -228,7 +228,8 @@ Rectangle {
                 readonly property bool open: !folder && path === doc.path
                 readonly property color ink: open ? theme.brightForeground : theme.foreground
 
-                width: ListView.view.width
+                // Short of the scrollbar, so it never sits over a row's color.
+                width: ListView.view.width - (listBar.visible ? listBar.width : 0)
                 height: Math.round(theme.textSize * 2)
 
                 Rectangle {

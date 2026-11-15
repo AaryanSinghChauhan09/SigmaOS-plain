@@ -3,7 +3,8 @@
 #include "portalfilepicker.h"
 
 #include <QDBusConnection>
-#include <QDBusInterface>
+#include <QDBusError>
+#include <QDBusMessage>
 #include <QDBusObjectPath>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
@@ -12,6 +13,15 @@
 #include <QRandomGenerator>
 
 namespace {
+const QString PortalService = QStringLiteral("org.freedesktop.portal.Desktop");
+
+// Messages built and sent as they are. A QDBusInterface would first ask the
+// portal to describe itself, a blocking call that freezes Plain for as long
+// as a hung portal doesn't answer.
+QDBusMessage portalCall(const QString &path, const QString &interface, const QString &method) {
+    return QDBusMessage::createMethodCall(PortalService, path, interface, method);
+}
+
 QString portalToken() {
     return QStringLiteral("plain_%1").arg(QRandomGenerator::global()->generate());
 }
@@ -55,10 +65,8 @@ bool PortalFilePicker::connectToRequestPath(const QString &path) {
 void PortalFilePicker::closePendingRequest() {
     if (m_pendingPath.isEmpty())
         return;
-    QDBusInterface request(QStringLiteral("org.freedesktop.portal.Desktop"), m_pendingPath,
-                           QStringLiteral("org.freedesktop.portal.Request"),
-                           QDBusConnection::sessionBus());
-    request.asyncCall(QStringLiteral("Close"));
+    QDBusConnection::sessionBus().send(
+        portalCall(m_pendingPath, QStringLiteral("org.freedesktop.portal.Request"), QStringLiteral("Close")));
 }
 
 void PortalFilePicker::requestFile(const QString &method, const QString &title,
@@ -72,10 +80,7 @@ void PortalFilePicker::requestFile(const QString &method, const QString &title,
     }
 
     QDBusConnection bus = QDBusConnection::sessionBus();
-    QDBusInterface portal(QStringLiteral("org.freedesktop.portal.Desktop"),
-                          QStringLiteral("/org/freedesktop/portal/desktop"),
-                          QStringLiteral("org.freedesktop.portal.FileChooser"), bus);
-    if (!portal.isValid()) {
+    if (!bus.isConnected()) {
         emit failed(tr("The desktop's file chooser (xdg-desktop-portal) is not available."));
         return;
     }
@@ -98,7 +103,10 @@ void PortalFilePicker::requestFile(const QString &method, const QString &title,
     }
 
     const int generation = ++m_pendingGeneration;
-    auto *watcher = new QDBusPendingCallWatcher(portal.asyncCall(method, QString(), title, options), this);
+    QDBusMessage call = portalCall(QStringLiteral("/org/freedesktop/portal/desktop"),
+                                   QStringLiteral("org.freedesktop.portal.FileChooser"), method);
+    call << QString() << title << options;
+    auto *watcher = new QDBusPendingCallWatcher(bus.asyncCall(call), this);
     m_pendingWatcher = watcher;
 
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, watcher, generation]() {
@@ -114,7 +122,13 @@ void PortalFilePicker::requestFile(const QString &method, const QString &title,
 
         if (reply.isError()) {
             clearPending();
-            emit failed(tr("The file chooser failed: %1").arg(reply.error().message()));
+            // No portal on the bus at all, rather than one that failed.
+            const QDBusError::ErrorType type = reply.error().type();
+            if (type == QDBusError::ServiceUnknown || type == QDBusError::UnknownObject
+                || type == QDBusError::UnknownInterface)
+                emit failed(tr("The desktop's file chooser (xdg-desktop-portal) is not available."));
+            else
+                emit failed(tr("The file chooser failed: %1").arg(reply.error().message()));
             return;
         }
 

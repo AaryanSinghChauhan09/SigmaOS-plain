@@ -83,11 +83,17 @@ Item {
         color: theme.background
         clip: true
 
+        // As many numbers as lines could fit on screen, which changes only
+        // with the window's height or the text size. Following the lines
+        // actually shown instead rebuilt every number on most scroll steps
+        // with wrap on, where that count changes as long lines pass.
         Repeater {
-            model: Math.max(0, view.lastLine - view.firstLine + 1)
+            objectName: "lineNumbers"
+            model: Math.ceil(flick.height / Math.max(1, metrics.height)) + 2
             delegate: Text {
                 required property int index
                 readonly property int line: view.firstLine + index
+                visible: line <= view.lastLine
                 // Re-read when anything moves the lines.
                 y: { flick.contentY; area.contentHeight; area.width; return area.positionToRectangle(editing.positionOfLine(line)).y - flick.contentY }
                 anchors.right: parent.right

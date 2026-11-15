@@ -3,6 +3,8 @@
 #include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLocalServer>
+#include <QLocalSocket>
 #include <QMap>
 #include <QQmlComponent>
 #include <QQmlApplicationEngine>
@@ -1507,6 +1509,33 @@ private slots:
         QCOMPARE(plain.sidebar()->property("currentPath").toString(), top);
     }
 
+    // The line numbers are a fixed set, re-used as the text scrolls, rather
+    // than rebuilt whenever the count of lines on screen changes.
+    void lineNumbersAreReusedWhileScrolling()
+    {
+        PlainWindow plain;
+        QByteArray lines;
+        for (int i = 0; i < 400; ++i)
+            lines += i % 3 ? "short\n" : QByteArray(400, 'w') + "\n";
+        write(plain.path("root/long.conf"), lines);
+        QVERIFY(plain.load("root/long.conf", ""));
+        QObject *numbers = plain.item("lineNumbers");
+        QObject *editor = plain.item("editorView");
+        const int count = numbers->property("count").toInt();
+        QVERIFY(count > 5);
+        QSignalSpy rebuilt(numbers, SIGNAL(countChanged()));
+        for (int i = 0; i < 6; ++i) {
+            plain.key(Qt::Key_PageDown);
+            // The first number is the first line on screen.
+            QQuickItem *first = nullptr;
+            QVERIFY(QMetaObject::invokeMethod(numbers, "itemAt", Q_RETURN_ARG(QQuickItem *, first), Q_ARG(int, 0)));
+            QCOMPARE(first->property("text").toString(), QString::number(editor->property("firstLine").toInt()));
+        }
+        QCOMPARE(rebuilt.count(), 0);
+        QCOMPARE(numbers->property("count").toInt(), count);
+        QVERIFY(editor->property("firstLine").toInt() > 1);
+    }
+
     // Paging keeps its column across a short line, and its place on screen.
     void pagingKeepsItsColumnAndPlace()
     {
@@ -1762,6 +1791,39 @@ private slots:
         Theme theme(dir.path());
         QCOMPARE(theme.accent(), QColor("#FFD60A"));
         QCOMPARE(theme.textSize(), 12);
+    }
+
+    // Rounding follows Hyprland: asked at start and on each config reload
+    // Hyprland announces, never on a timer.
+    void themeFollowsHyprlandRounding()
+    {
+        QTemporaryDir dir;
+        write(dir.filePath("rounding"), "4");
+        write(dir.filePath("hyprctl"), "#!/bin/sh\necho \"{\\\"int\\\": $(cat '" + QFile::encodeName(dir.filePath("rounding")) + "')}\"\n");
+        QFile::setPermissions(dir.filePath("hyprctl"), QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+        QLocalServer hyprland;
+        QVERIFY(hyprland.listen(dir.filePath("events.sock")));
+
+        // The theme's folder apart from the fakes: a theme change asks too.
+        QDir(dir.path()).mkpath("state");
+        Theme theme(dir.filePath("state"), nullptr, dir.filePath("hyprctl"), dir.filePath("events.sock"));
+        QTRY_COMPARE(theme.radius(), 4);
+        QTRY_VERIFY(hyprland.hasPendingConnections());
+        QLocalSocket *events = hyprland.nextPendingConnection();
+
+        // Changed without telling anyone: nothing asks again.
+        write(dir.filePath("rounding"), "8");
+        QTest::qWait(1500);
+        QCOMPARE(theme.radius(), 4);
+
+        // Other events don't ask either; a config reload does.
+        events->write("workspace>>2\n");
+        events->flush();
+        QTest::qWait(300);
+        QCOMPARE(theme.radius(), 4);
+        events->write("configreloaded>>\n");
+        events->flush();
+        QTRY_COMPARE(theme.radius(), 8);
     }
 
     // The display panel's Text size: the user's override, else the theme's.

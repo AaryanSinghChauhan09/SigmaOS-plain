@@ -4,6 +4,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
@@ -39,7 +40,7 @@ double luminance(const QColor &c) {
 
 } // namespace
 
-Theme::Theme(const QString &directory, QObject *parent, const QString &hyprctl)
+Theme::Theme(const QString &directory, QObject *parent, const QString &hyprctl, const QString &hyprlandEvents)
     : QObject(parent),
       m_directory(directory.isEmpty() ? QDir::homePath() + "/.local/state/omarchy/current" : directory),
       // `omarchy display text size` writes the user's override here; tests
@@ -72,10 +73,28 @@ Theme::Theme(const QString &directory, QObject *parent, const QString &hyprctl)
             emit changed();
         }
     });
-    m_roundingPoll.setInterval(1000);
-    connect(&m_roundingPoll, &QTimer::timeout, this, &Theme::refreshRounding);
-    if (!m_hyprctl.isEmpty())
-        m_roundingPoll.start();
+    // Asked again when Hyprland reloads its config, as a theme change does,
+    // and when Plain's window comes forward, which catches a rounding set
+    // live with hyprctl keyword. Never on a timer: as $EDITOR, Plain can sit
+    // open for hours.
+    if (!m_hyprctl.isEmpty()) {
+        refreshRounding();
+        connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState state) {
+            if (state == Qt::ApplicationActive)
+                refreshRounding();
+        });
+        const QString events = !hyprlandEvents.isEmpty() ? hyprlandEvents
+            : QStringLiteral("%1/hypr/%2/.socket2.sock")
+                  .arg(qEnvironmentVariable("XDG_RUNTIME_DIR"), qEnvironmentVariable("HYPRLAND_INSTANCE_SIGNATURE"));
+        connect(&m_events, &QLocalSocket::readyRead, this, [this] {
+            bool reloaded = false;
+            while (m_events.canReadLine())
+                reloaded |= m_events.readLine().startsWith("configreloaded>>");
+            if (reloaded)
+                refreshRounding();
+        });
+        m_events.connectToServer(events, QIODevice::ReadOnly);
+    }
     reload();
 }
 

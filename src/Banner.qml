@@ -105,10 +105,7 @@ Rectangle {
             text: "✕"
             tooltip: qsTr("Dismiss (Escape)")
             onClicked: {
-                if (banner.problem === "DeletedOnDisk")
-                    doc.keepMine()
-                else
-                    doc.dismissProblem()
+                doc.dismissProblem()
                 banner.done()
             }
         }

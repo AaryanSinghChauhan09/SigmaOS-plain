@@ -76,6 +76,7 @@ ApplicationWindow {
     function request(action) {
         if (doc.modified && !discardConfirmed) {
             pendingAction = action
+            unsaved.returnFocus = win.activeFocusItem
             unsaved.open()
             return
         }
@@ -110,7 +111,8 @@ ApplicationWindow {
 
     // Shows the files of the folder Plain was opened on, or else the open
     // file's, with the open file picked out.
-    readonly property string home: StandardPaths.writableLocation(StandardPaths.HomeLocation).toString().replace(/^file:\/\//, "")
+    // From C++, as a path: a URL's string keeps # and % escaped.
+    readonly property string home: homePath
 
     // A path the way the footer shows it, with the home folder as ~.
     function displayPath(path) { return path.startsWith(home + "/") ? "~" + path.substring(home.length) : path === home ? "~" : path }
@@ -148,8 +150,10 @@ ApplicationWindow {
         context: Qt.ApplicationShortcut
         onActivated: sidebar.treeFocused ? files.showHidden = !files.showHidden : findBar.toggle(true)
     }
-    Shortcut { sequences: ["F3", StandardKey.FindNext]; context: Qt.ApplicationShortcut; onActivated: findBar.next(false) }
-    Shortcut { sequences: ["Shift+F3", StandardKey.FindPrevious]; context: Qt.ApplicationShortcut; onActivated: findBar.next(true) }
+    // Each key once: StandardKey.FindNext is F3 itself on Linux, and a key
+    // listed twice is ambiguous to Qt and never fires.
+    Shortcut { sequence: "F3"; context: Qt.ApplicationShortcut; onActivated: findBar.next(false) }
+    Shortcut { sequence: "Shift+F3"; context: Qt.ApplicationShortcut; onActivated: findBar.next(true) }
     Shortcut { sequence: "Ctrl+G"; context: Qt.ApplicationShortcut; onActivated: goToLine.open() }
     Shortcut { sequence: "Ctrl+/"; context: Qt.ApplicationShortcut; enabled: doc.editable; onActivated: editor.toggleComment() }
     Shortcut { sequence: "Alt+Z"; context: Qt.ApplicationShortcut; onActivated: settings.wrap = !settings.wrap }
@@ -301,9 +305,29 @@ ApplicationWindow {
             }
         }
 
+        // The keys go to the shortcuts while they show, so typing can't
+        // change the text behind them, and come back where they were.
         HelpOverlay {
+            id: help
+            objectName: "help"
             anchors.fill: parent
             visible: win.helpVisible
+            property var returnFocus: null
+            onVisibleChanged: {
+                if (visible) {
+                    returnFocus = win.activeFocusItem
+                    forceActiveFocus()
+                } else if (activeFocus) {
+                    // Closed with the keys still on it: back where they were.
+                    if (returnFocus)
+                        returnFocus.forceActiveFocus()
+                    else
+                        editor.focusText()
+                }
+            }
+            // Anything else taking the keys, like Ctrl+B or Ctrl+F, closes it,
+            // so typing can never reach the text behind it.
+            onActiveFocusChanged: if (!activeFocus && visible) win.helpVisible = false
             onDismissed: win.helpVisible = false
         }
     }
@@ -561,11 +585,20 @@ ApplicationWindow {
         onClosed: {
             if (win.pendingAction.length > 0 && !choosing) {
                 win.pendingAction = ""
-                editor.focusText()
+                giveBackFocus()
             }
             choosing = false
         }
         property bool choosing: false
+        // Where the keys were when it asked, for a cancel to go back to:
+        // the files, if a file was picked there.
+        property var returnFocus: null
+        function giveBackFocus() {
+            if (returnFocus)
+                returnFocus.forceActiveFocus()
+            else
+                editor.focusText()
+        }
         Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, 0.55) }
         // There and gone at once: Plain animates nothing.
         enter: Transition {}
@@ -582,7 +615,7 @@ ApplicationWindow {
                 win.finish(win.pendingAction)
             } else {
                 win.pendingAction = ""
-                editor.focusText()
+                giveBackFocus()
             }
         }
 

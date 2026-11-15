@@ -10,6 +10,18 @@ Rectangle {
 
     color: Qt.rgba(0, 0, 0, 0.55)
 
+    // While it shows, the keys scroll it and type nothing behind it; the
+    // window's shortcuts, like F1 and Escape to close it, still work.
+    Keys.onPressed: function(event) {
+        const step = Math.round(theme.textSize * 2)
+        const page = Math.max(step, list.height - step)
+        const by = event.key === Qt.Key_Down ? step : event.key === Qt.Key_Up ? -step
+                 : event.key === Qt.Key_PageDown ? page : event.key === Qt.Key_PageUp ? -page
+                 : event.key === Qt.Key_End ? list.contentHeight : event.key === Qt.Key_Home ? -list.contentHeight : 0
+        list.contentY = Math.max(0, Math.min(list.contentHeight - list.height, list.contentY + by))
+        event.accepted = true
+    }
+
     property var shortcuts: [
         ["Ctrl + S", qsTr("Save")],
         ["Ctrl + Shift + S", qsTr("Save as")],

@@ -12,8 +12,11 @@ Popup {
     focus: true
     padding: 16
     Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, 0.55) }
-    // Focused as it starts to show rather than once its animation ends, so a
-    // quick Ctrl+G 1 2 Enter lands every key in the field.
+    // There and gone at once: Plain animates nothing.
+    enter: Transition {}
+    exit: Transition {}
+    // Focused as it starts to show, so a quick Ctrl+G 1 2 Enter lands every
+    // key in the field.
     onAboutToShow: {
         field.text = ""
         field.placeholder = qsTr("1 to %1").arg(editing.lineCount())

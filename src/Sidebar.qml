@@ -124,9 +124,19 @@ Rectangle {
             currentIndex: -1
             keyNavigationEnabled: true
             boundsBehavior: Flickable.StopAtBounds
-            onCurrentIndexChanged: sidebar.currentPath = files.pathAt(currentIndex)
+            // The keys' row is brought into view at once, not scrolled to.
+            highlightFollowsCurrentItem: false
+            highlightMoveDuration: 0
+            highlightResizeDuration: 0
+            onCurrentIndexChanged: {
+                sidebar.currentPath = files.pathAt(currentIndex)
+                if (currentIndex >= 0)
+                    positionViewAtIndex(currentIndex, ListView.Contain)
+            }
 
-            ScrollBar.vertical: ScrollBar { policy: list.visibleArea.heightRatio < 1 ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff }
+            // Shown whenever there's more, as the editor's: one that shows
+            // while scrolling fades in and out.
+            ScrollBar.vertical: ScrollBar { policy: list.visibleArea.heightRatio < 1 ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff }
 
             // Dropped below the rows: into the top folder.
             DropArea {
@@ -163,11 +173,14 @@ Rectangle {
                 } else if (event.key === Qt.Key_PageUp || event.key === Qt.Key_PageDown) {
                     const page = Math.max(1, Math.floor(list.height / Math.round(theme.textSize * 2)) - 1)
                     list.currentIndex = Math.max(0, Math.min(list.count - 1, row + (event.key === Qt.Key_PageUp ? -page : page)))
-                } else if (event.text.length > 0 && event.text.trim().length > 0
+                } else if (event.key === Qt.Key_Delete) {
+                    if (row >= 0)
+                        sidebar.deleteRequested(row)
+                } else if (/^[^\x00-\x20\x7f]+$/.test(event.text)
                            && !(event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier))) {
+                    // Printable letters only: Delete and Backspace carry
+                    // control characters as their text.
                     sidebar.jumpTo(event.text)
-                } else if (event.key === Qt.Key_Delete && row >= 0) {
-                    sidebar.deleteRequested(row)
                 } else if (event.key === Qt.Key_Escape) {
                     sidebar.done()
                 } else {

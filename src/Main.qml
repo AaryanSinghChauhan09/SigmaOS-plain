@@ -315,6 +315,9 @@ ApplicationWindow {
         focus: true
         padding: 22
         Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, 0.55) }
+        // There and gone at once: Plain animates nothing.
+        enter: Transition {}
+        exit: Transition {}
 
         property bool folder: false
         property string inFolder: ""
@@ -376,13 +379,12 @@ ApplicationWindow {
                 elide: Text.ElideMiddle
                 color: theme.secondaryForeground
             }
-            TextField {
+            // The find bar's field: Material's TextField floats its label.
+            FindField {
                 id: nameField
                 objectName: "newName"
                 Layout.fillWidth: true
-                placeholderText: namePrompt.folder ? qsTr("Folder name") : qsTr("File name")
-                color: theme.brightForeground
-                selectionColor: win.tint(theme.accent, 0.35)
+                placeholder: namePrompt.folder ? qsTr("Folder name") : qsTr("File name")
                 onTextEdited: namePrompt.error = ""
                 Keys.onReturnPressed: namePrompt.create()
                 Keys.onEnterPressed: namePrompt.create()
@@ -422,6 +424,9 @@ ApplicationWindow {
         focus: true
         padding: 22
         Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, 0.55) }
+        // There and gone at once: Plain animates nothing.
+        enter: Transition {}
+        exit: Transition {}
 
         property int row: -1
         property string path: ""
@@ -524,6 +529,9 @@ ApplicationWindow {
         }
         property bool choosing: false
         Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, 0.55) }
+        // There and gone at once: Plain animates nothing.
+        enter: Transition {}
+        exit: Transition {}
 
         function choose(choice) {
             choosing = true

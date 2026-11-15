@@ -247,6 +247,9 @@ class PlainTests : public QObject {
     Q_OBJECT
 
 private slots:
+    // Before any QML loads, as Plain itself does.
+    void initTestCase() { QQuickStyle::setStyle("Material"); }
+
     // Decoding.
 
     void decodesLfAndCrlf()
@@ -1088,7 +1091,6 @@ private slots:
               "  function tint(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }\n"
               "  Sidebar { objectName: \"sidebar\"; anchors.fill: parent } }\n");
 
-        QQuickStyle::setStyle("Material");
         Theme theme(dir.path());
         FileTree tree;
         tree.setRoot(dir.filePath("root"));
@@ -1126,6 +1128,47 @@ private slots:
         QVERIFY(doc.modified());
         QCOMPARE(names(tree), QStringList({"folder", "a.conf", "b.conf"}));
         QCOMPARE(tree.pathAt(1), QDir::cleanPath(dir.filePath("root/folder/a.conf")));
+    }
+
+    // The sidebar's keys, offscreen: typing jumps, and Delete asks.
+    void sidebarKeys()
+    {
+        QTemporaryDir dir;
+        QDir(dir.path()).mkpath("root");
+        for (const char *name : {"autostart.lua", "bindings.lua", "input.lua"})
+            write(dir.filePath(QString("root/") + name), "");
+        write(dir.filePath("Harness.qml"),
+              "import QtQuick\nimport \"file://" + QFile::encodeName(sourceFolder()) + "\"\n"
+              "Item { id: win; width: 300; height: 400; property int asked: -1\n"
+              "  function tint(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }\n"
+              "  Sidebar { id: bar; objectName: \"sidebar\"; anchors.fill: parent\n"
+              "    onDeleteRequested: function(row) { win.asked = row } }\n"
+              "  Component.onCompleted: bar.focusTree() }\n");
+
+        Theme theme(dir.path());
+        FileTree tree;
+        tree.setRoot(dir.filePath("root"));
+        QTextDocument text;
+        Document doc;
+        doc.attachDocument(&text);
+
+        QQuickView view;
+        view.engine()->rootContext()->setContextProperty("theme", &theme);
+        view.engine()->rootContext()->setContextProperty("doc", &doc);
+        view.engine()->rootContext()->setContextProperty("files", &tree);
+        view.setSource(QUrl::fromLocalFile(dir.filePath("Harness.qml")));
+        QVERIFY(view.status() == QQuickView::Ready);
+        view.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&view));
+        QObject *sidebar = view.rootObject()->findChild<QObject *>("sidebar");
+        QVERIFY(sidebar);
+        QTRY_VERIFY(sidebar->property("treeFocused").toBool());
+
+        QTest::keyClick(&view, Qt::Key_I);
+        QTRY_COMPARE(sidebar->property("currentPath").toString(), QDir::cleanPath(dir.filePath("root/input.lua")));
+        QTest::keyClick(&view, Qt::Key_Delete);
+        QCOMPARE(view.rootObject()->property("asked").toInt(), 2);
+        QVERIFY(QFileInfo::exists(dir.filePath("root/input.lua")));
     }
 
     void closesToAnEmptyDocument()

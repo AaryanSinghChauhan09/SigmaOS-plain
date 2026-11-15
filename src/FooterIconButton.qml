@@ -15,8 +15,10 @@ Item {
     width: 16
     height: 16
 
-    ToolTip.visible: hitArea.containsMouse && tooltip.length > 0
-    ToolTip.text: tooltip
+    Tip {
+        visible: hitArea.containsMouse && control.tooltip.length > 0
+        text: control.tooltip
+    }
 
     LineIcon {
         anchors.fill: parent

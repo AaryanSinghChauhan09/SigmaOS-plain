@@ -8,19 +8,24 @@
 
 // The sidebar's folder, as the rows a list shows: each open folder's
 // contents follow it one level deeper. Folders come first, then files, both
-// alphabetical; dotfiles are left out. Open folders are watched, so a file
-// created or removed elsewhere shows up without asking.
+// alphabetical. Dotfiles are left out unless shown (Ctrl+H in the files),
+// which they are to start with when the folder is inside a hidden one. Open
+// folders are watched, so a file created or removed elsewhere shows up
+// without asking.
 class FileTree : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(QString root READ root WRITE setRoot NOTIFY rootChanged)
+    Q_PROPERTY(bool showHidden READ showHidden WRITE setShowHidden NOTIFY showHiddenChanged)
 
 public:
-    enum Role { NameRole = Qt::UserRole + 1, PathRole, DepthRole, FolderRole, ExpandedRole };
+    enum Role { NameRole = Qt::UserRole + 1, PathRole, DepthRole, FolderRole, ExpandedRole, HiddenRole };
 
     explicit FileTree(QObject *parent = nullptr);
 
     QString root() const { return m_root; }
     void setRoot(const QString &root);
+    bool showHidden() const { return m_showHidden; }
+    void setShowHidden(bool show);
 
     int rowCount(const QModelIndex &parent = {}) const override;
     QVariant data(const QModelIndex &index, int role) const override;
@@ -60,6 +65,7 @@ public:
 
 signals:
     void rootChanged();
+    void showHiddenChanged();
     // After a folder changed on disk and the rows were rebuilt.
     void refreshed();
 
@@ -81,6 +87,7 @@ private:
     QString m_root;
     QVector<Entry> m_rows;
     QSet<QString> m_expanded;
+    bool m_showHidden = false;
     QFileSystemWatcher m_watcher;
     QTimer m_debounce;
 };

@@ -4,6 +4,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QRegularExpression>
 #include <algorithm>
 
 // A name in a folder, right at the root too ("/" + "etc", not "//etc").
@@ -29,8 +30,22 @@ void FileTree::setRoot(const QString &root) {
         return;
     m_root = clean;
     m_expanded.clear();
+    // Inside a hidden folder, its neighbours are what the user came for.
+    const bool inHidden = clean.split('/', Qt::SkipEmptyParts).filter(QRegularExpression("^\\.")).size() > 0;
+    if (inHidden != m_showHidden) {
+        m_showHidden = inHidden;
+        emit showHiddenChanged();
+    }
     rebuild();
     emit rootChanged();
+}
+
+void FileTree::setShowHidden(bool show) {
+    if (show == m_showHidden)
+        return;
+    m_showHidden = show;
+    rebuild();
+    emit showHiddenChanged();
 }
 
 int FileTree::rowCount(const QModelIndex &parent) const {
@@ -47,17 +62,21 @@ QVariant FileTree::data(const QModelIndex &index, int role) const {
     case DepthRole: return entry.depth;
     case FolderRole: return entry.folder;
     case ExpandedRole: return entry.folder && m_expanded.contains(entry.path);
+    case HiddenRole: return entry.name.startsWith('.');
     }
     return {};
 }
 
 QHash<int, QByteArray> FileTree::roleNames() const {
     return {{NameRole, "name"}, {PathRole, "path"}, {DepthRole, "depth"},
-            {FolderRole, "folder"}, {ExpandedRole, "expanded"}};
+            {FolderRole, "folder"}, {ExpandedRole, "expanded"}, {HiddenRole, "hidden"}};
 }
 
 QVector<FileTree::Entry> FileTree::rowsUnder(const QString &folder, int depth) const {
-    QFileInfoList infos = QDir(folder).entryInfoList(QDir::AllEntries | QDir::NoDotAndDotDot);
+    QDir::Filters filters = QDir::AllEntries | QDir::NoDotAndDotDot;
+    if (m_showHidden)
+        filters |= QDir::Hidden;
+    QFileInfoList infos = QDir(folder).entryInfoList(filters);
     QCollator collator;
     collator.setNumericMode(true);
     collator.setCaseSensitivity(Qt::CaseInsensitive);

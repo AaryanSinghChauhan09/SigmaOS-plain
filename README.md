@@ -28,7 +28,7 @@ Plain runs in the foreground and exits when its window closes, so it works as `$
 
 ## Files
 
-The sidebar shows a folder's files: the folder Plain was opened on, or the open file's. It's hidden until Ctrl+B or the icon at the left of the footer shows it, and opening Plain on a folder starts with it shown. Folders come first, dotfiles stay out of the way, and the list follows the disk as files come and go.
+The sidebar shows a folder's files: the folder Plain was opened on, or the open file's. It's hidden until Ctrl+B or the icon at the left of the footer shows it, and opening Plain on a folder starts with it shown. Folders come first, and the list follows the disk as files come and go. Hidden files stay out of the way until Ctrl+H in the files shows them, and show from the start when the folder is inside a hidden one, like `~/.config/hypr`.
 
 - **Click a file, or Enter on it**, to open it. Unsaved changes are asked about first, as with Ctrl+O.
 - **Keys**: Ctrl+B shows the files with the keys on the open file, and hides them again; Ctrl+Tab hops between files and text, to keep the files open while editing. In the files, Up/Down, Page Up/Down, Home and End move; Right and Left open and close folders; typing a name's first letters jumps to it; Enter opens a file and goes to the text, Space opens it and stays; Escape goes back to the text.
@@ -50,7 +50,7 @@ The sidebar shows a folder's files: the folder Plain was opened on, or the open 
 | Delete | Move the picked file to the trash, after asking |
 | Ctrl+Z / Ctrl+Shift+Z | Undo / redo |
 | Ctrl+F | Find |
-| Ctrl+H | Find and replace |
+| Ctrl+H | Find and replace; in the files, show or hide hidden files |
 | Enter / Shift+Enter | Next / previous match |
 | Ctrl+G | Go to line |
 | Ctrl+/ | Comment or uncomment |

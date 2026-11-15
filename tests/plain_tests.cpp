@@ -899,6 +899,32 @@ private slots:
         QCOMPARE(tree.data(tree.index(0), FileTree::DepthRole).toInt(), 0);
     }
 
+    void showsHiddenFilesOnAskingOrInsideAHiddenFolder()
+    {
+        QTemporaryDir dir;
+        QDir(dir.path()).mkpath("home/.config/hypr");
+        write(dir.filePath("home/.bashrc"), "");
+        write(dir.filePath("home/notes.md"), "");
+        write(dir.filePath("home/.config/hypr/.backup"), "");
+        write(dir.filePath("home/.config/hypr/hyprland.lua"), "");
+
+        FileTree tree;
+        tree.setRoot(dir.filePath("home"));
+        QVERIFY(!tree.showHidden());
+        QCOMPARE(names(tree), QStringList({"notes.md"}));
+        tree.setShowHidden(true);
+        QCOMPARE(names(tree), QStringList({".config", ".bashrc", "notes.md"}));
+        QVERIFY(tree.data(tree.index(0), FileTree::HiddenRole).toBool());
+        QVERIFY(!tree.data(tree.index(2), FileTree::HiddenRole).toBool());
+
+        // Started inside a hidden folder, everything shows.
+        tree.setRoot(dir.filePath("home/.config/hypr"));
+        QVERIFY(tree.showHidden());
+        QCOMPARE(names(tree), QStringList({".backup", "hyprland.lua"}));
+        tree.setRoot(dir.filePath("home"));
+        QVERIFY(!tree.showHidden());
+    }
+
     void foldsFoldersOpenAndClosed()
     {
         QTemporaryDir dir;
@@ -1306,6 +1332,27 @@ private slots:
         QTRY_COMPARE(plain.doc.path(), plain.path("root/a.conf"));
         QCOMPARE(read(plain.path("root/b.conf")), QByteArray("xb\n"));
         QTRY_VERIFY(plain.sidebar()->property("treeFocused").toBool());
+    }
+
+    // Ctrl+H: hidden files in the files, find and replace in the text.
+    void ctrlHDependsOnWhereTheKeysAre()
+    {
+        PlainWindow plain;
+        write(plain.path("root/.hidden"), "");
+        QVERIFY(plain.load("root/b.conf", ""));
+        plain.key(Qt::Key_B, Qt::ControlModifier);
+        QTRY_VERIFY(plain.sidebar()->property("treeFocused").toBool());
+        QVERIFY(!plain.files.showHidden());
+        plain.key(Qt::Key_H, Qt::ControlModifier);
+        QVERIFY(plain.files.showHidden());
+        QVERIFY(plain.files.indexOf(plain.path("root/.hidden")) >= 0);
+        QVERIFY(!plain.item("findBar")->property("visible").toBool());
+
+        plain.key(Qt::Key_Tab, Qt::ControlModifier);
+        QTRY_VERIFY(plain.editorFocused());
+        plain.key(Qt::Key_H, Qt::ControlModifier);
+        QVERIFY(plain.files.showHidden());
+        QTRY_VERIFY(plain.item("findBar")->property("visible").toBool());
     }
 
     void anUntitledDocumentNeverAsksForAFile()

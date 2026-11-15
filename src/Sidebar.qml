@@ -197,6 +197,7 @@ Rectangle {
                 required property int depth
                 required property bool folder
                 required property bool expanded
+                required property bool hidden
 
                 // Where a row dropped here goes: into a folder, or beside a file.
                 readonly property string dropFolder: folder ? path : (path.substring(0, path.lastIndexOf("/")) || "/")
@@ -258,7 +259,7 @@ Rectangle {
                         anchors.verticalCenter: parent.verticalCenter
                         name: row.folder ? "folder" : "file"
                         color: row.open ? theme.accent : theme.secondaryForeground
-                        opacity: row.open ? 1 : 0.8
+                        opacity: row.open ? 1 : row.hidden ? 0.5 : 0.8
                     }
 
                     Item { width: 7; height: 1 }
@@ -270,7 +271,8 @@ Rectangle {
                         textFormat: Text.PlainText
                         elide: Text.ElideRight
                         color: row.ink
-                        opacity: row.open ? 1 : 0.85
+                        // Hidden ones fainter, as they're shown only on asking.
+                        opacity: row.open ? 1 : row.hidden ? 0.55 : 0.85
                     }
                 }
 

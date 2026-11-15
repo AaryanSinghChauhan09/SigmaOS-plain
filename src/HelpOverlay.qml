@@ -21,7 +21,7 @@ Rectangle {
         ["Delete", qsTr("Delete from files")],
         ["Ctrl + Z / Ctrl + Shift + Z", qsTr("Undo / redo")],
         ["Ctrl + F", qsTr("Find")],
-        ["Ctrl + H", qsTr("Find and replace")],
+        ["Ctrl + H", qsTr("Find and replace (in files: hidden files)")],
         ["Enter / Shift + Enter", qsTr("Next / previous match")],
         ["Ctrl + Enter", qsTr("Replace all")],
         ["Ctrl + G", qsTr("Go to line")],

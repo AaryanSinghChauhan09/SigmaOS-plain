@@ -268,10 +268,12 @@ ApplicationWindow {
                     LayoutMirroring.enabled: false
                     LayoutMirroring.childrenInherit: true
 
-                    // Opened on a folder, nothing is open until a file is picked.
+                    // Opened on a folder, nothing is open until a file is
+                    // picked. Plain without a file is an untitled document
+                    // to type in, so it says nothing there.
                     Label {
                         anchors.centerIn: parent
-                        visible: win.sidebarVisible && doc.path.length === 0 && editor.area.length === 0
+                        visible: startFolder.length > 0 && win.sidebarVisible && doc.path.length === 0 && editor.area.length === 0
                         text: qsTr("Pick a file")
                         color: theme.secondaryForeground
                         opacity: 0.7

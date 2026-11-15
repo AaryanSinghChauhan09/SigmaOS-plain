@@ -21,6 +21,9 @@ Rectangle {
     // Escape: back to the text.
     signal done()
 
+    // How far a row's color and ring stay in from each side.
+    readonly property int rowInset: 6
+
     // Dragged wider or narrower by its edge, for as long as Plain is open.
     property real preferredWidth: 232
     // The row the keys are on, kept by path across a refresh from disk.
@@ -232,8 +235,14 @@ Rectangle {
                 width: ListView.view.width - (listBar.visible ? listBar.width : 0)
                 height: Math.round(theme.textSize * 2)
 
+                // Every row's color and ring sit inset by the same margin on
+                // both sides, clear of the window's edge and the scrollbar.
                 Rectangle {
+                    id: rowColor
                     anchors.fill: parent
+                    anchors.leftMargin: sidebar.rowInset
+                    anchors.rightMargin: sidebar.rowInset
+                    radius: Math.min(3, theme.radius)
                     // Where the keys are, while they're in the tree.
                     border.width: row.ListView.isCurrentItem && list.activeFocus ? 1 : 0
                     border.color: theme.accent
@@ -244,10 +253,10 @@ Rectangle {
                          : "transparent"
                 }
 
-                // The open file's edge, in the accent.
+                // The open file's edge, in the accent, inside its color.
                 Rectangle {
                     visible: row.open
-                    anchors.left: parent.left
+                    anchors.left: rowColor.left
                     width: 2
                     height: parent.height
                     color: theme.accent
@@ -256,8 +265,8 @@ Rectangle {
                 Row {
                     anchors.left: parent.left
                     anchors.right: parent.right
-                    anchors.leftMargin: 6 + row.depth * 16
-                    anchors.rightMargin: 10
+                    anchors.leftMargin: sidebar.rowInset + 6 + row.depth * 16
+                    anchors.rightMargin: sidebar.rowInset + 6
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 0
 

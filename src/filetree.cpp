@@ -102,9 +102,34 @@ void FileTree::rebuild() {
     // Folders removed from disk stop being open, so they don't come back open.
     for (auto it = m_expanded.begin(); it != m_expanded.end();)
         it = QFileInfo(*it).isDir() ? std::next(it) : m_expanded.erase(it);
-    beginResetModel();
-    m_rows = m_root.isEmpty() ? QVector<Entry>() : rowsUnder(m_root, 0);
-    endResetModel();
+    const QVector<Entry> rows = m_root.isEmpty() ? QVector<Entry>() : rowsUnder(m_root, 0);
+
+    // Only the rows between the unchanged start and end are replaced. A
+    // reset would scroll the list back to its top on every save in a shown
+    // folder, and drop a click or drag in progress with its row.
+    auto same = [](const Entry &a, const Entry &b) {
+        return a.path == b.path && a.depth == b.depth && a.folder == b.folder;
+    };
+    qsizetype head = 0;
+    while (head < m_rows.size() && head < rows.size() && same(m_rows.at(head), rows.at(head)))
+        ++head;
+    qsizetype tail = 0;
+    while (tail < m_rows.size() - head && tail < rows.size() - head
+           && same(m_rows.at(m_rows.size() - 1 - tail), rows.at(rows.size() - 1 - tail)))
+        ++tail;
+    if (const qsizetype gone = m_rows.size() - tail - head; gone > 0) {
+        beginRemoveRows({}, int(head), int(head + gone - 1));
+        m_rows.remove(head, gone);
+        endRemoveRows();
+    }
+    if (const qsizetype added = rows.size() - tail - head; added > 0) {
+        beginInsertRows({}, int(head), int(head + added - 1));
+        m_rows = m_rows.mid(0, head) + rows.mid(head, added) + m_rows.mid(head);
+        endInsertRows();
+    }
+    // Rows that stayed can still have opened or closed.
+    if (!m_rows.isEmpty())
+        emit dataChanged(index(0), index(int(m_rows.size()) - 1), {ExpandedRole});
     rewatch();
     emit refreshed();
 }
@@ -135,9 +160,9 @@ void FileTree::expand(int row) {
     m_expanded.insert(entry.path);
     const QVector<Entry> children = rowsUnder(entry.path, entry.depth + 1);
     if (!children.isEmpty()) {
+        // In one go: one at a time shifts the rows after it once per child.
         beginInsertRows({}, row + 1, row + int(children.size()));
-        for (int i = 0; i < children.size(); ++i)
-            m_rows.insert(row + 1 + i, children.at(i));
+        m_rows = m_rows.mid(0, row + 1) + children + m_rows.mid(row + 1);
         endInsertRows();
     }
     const QModelIndex at = index(row);
@@ -346,10 +371,15 @@ QVariantMap FileTree::duplicate(const QString &source) {
     QString to;
     for (int n = 1; to.isEmpty() || QFileInfo::exists(to) || QFileInfo(to).isSymLink(); ++n)
         to = joined(info.absolutePath(), stem + (n == 1 ? tr(" copy") : tr(" copy %1").arg(n)) + suffix);
-    // Never over anything: copy refuses an existing name. Links inside a
-    // folder are copied as links.
+    // A link duplicates as a copy of what it points to: another link to the
+    // same file would make editing "the copy" change the original. Never over
+    // anything: copy refuses an existing name. Links inside a folder are
+    // copied as links.
+    const QString original = info.isSymLink() ? info.canonicalFilePath() : from;
+    if (original.isEmpty())
+        return {{"error", tr("%1 points at nothing to duplicate").arg(name)}};
     std::error_code error;
-    std::filesystem::copy(QFile::encodeName(from).constData(), QFile::encodeName(to).constData(),
+    std::filesystem::copy(QFile::encodeName(original).constData(), QFile::encodeName(to).constData(),
                           std::filesystem::copy_options::recursive | std::filesystem::copy_options::copy_symlinks,
                           error);
     if (error)

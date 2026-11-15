@@ -97,7 +97,10 @@ Document::Decoded Document::decode(const QByteArray &input) {
     QStringDecoder decoder(QStringConverter::Utf8,
                            QStringConverter::Flag::Stateless | QStringConverter::Flag::ConvertInitialBom);
     QString text = decoder.decode(bytes);
-    if (decoder.hasError() || text.contains(ParagraphStandIn))
+    // Qt's text document reads U+FDD0 and U+FDD1 as frame markers and saves
+    // them as line breaks, so a file holding them couldn't come back whole.
+    if (decoder.hasError() || text.contains(ParagraphStandIn) || text.contains(QChar(0xFDD0))
+        || text.contains(QChar(0xFDD1)))
         return result;
     text.replace(QChar::ParagraphSeparator, ParagraphStandIn);
 
@@ -316,7 +319,10 @@ bool Document::tooLarge(qint64 size, const QString &text) {
 // it arrives. Opening goes through the TextEdit (see attach()); a reload is
 // one undoable replacement.
 void Document::setText(const QString &text, bool undoably) {
-    setLanguageFor(m_path, text.left(text.indexOf(QChar(u'\n'))), false);
+    // The same text as before isn't set again, so nothing recolors it for a
+    // new language: recolor here instead.
+    const bool unchanged = !undoably && m_document && m_document->toPlainText() == text;
+    setLanguageFor(m_path, text.left(text.indexOf(QChar(u'\n'))), unchanged);
     if (undoably) {
         QTextCursor cursor(m_document);
         cursor.beginEditBlock();
@@ -333,6 +339,10 @@ void Document::setText(const QString &text, bool undoably) {
     } else {
         m_document->setPlainText(text);
     }
+    // Another file's edits never come back with Ctrl+Z, even when its text
+    // was the same and setting it again changed nothing.
+    if (!undoably)
+        m_document->clearUndoRedoStacks();
     m_document->setModified(false);
 }
 
@@ -518,7 +528,11 @@ void Document::keepMine() {
     setProblem(Problem::None);
 }
 
+// Escape and the banner's close alike. A file deleted on disk is let go of
+// as Keep mine would: saving recreates it rather than asking again.
 void Document::dismissProblem() {
+    if (m_problem == Problem::DeletedOnDisk)
+        acknowledgeDisk();
     setProblem(Problem::None);
 }
 

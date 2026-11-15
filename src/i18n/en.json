@@ -13,6 +13,7 @@
   "%1 isn't a UTF-8 text file, so Text Editor didn't open it.": "%1 isn't a UTF-8 text file, so Text Editor didn't open it.",
   "%1 isn't a file Text Editor can open.": "%1 isn't a file Text Editor can open.",
   "%1 isn't a folder": "%1 isn't a folder",
+  "%1 points at nothing to duplicate": "%1 points at nothing to duplicate",
   "%1 was deleted on disk.": "%1 was deleted on disk.",
   "%n matches": {
     "one": "%n match",

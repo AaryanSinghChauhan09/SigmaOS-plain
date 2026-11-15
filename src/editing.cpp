@@ -60,7 +60,9 @@ void Editing::toggleComment(int start, int end) {
         const QString text = block.text();
         const int indent = leadingWhitespace(text);
         column = qMin(column, indent);
-        if (!text.mid(indent).startsWith(prefix))
+        // In CSS, a line only starts with /* when an inline comment opens
+        // it; commented means wrapped whole.
+        if (!text.mid(indent).startsWith(prefix) || (!suffix.isEmpty() && !text.trimmed().endsWith("*/")))
             allCommented = false;
     }
 

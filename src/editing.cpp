@@ -1,5 +1,7 @@
 #include "editing.h"
 
+#include <QRegularExpression>
+
 #include "document.h"
 
 #include <QTextBlock>
@@ -39,15 +41,28 @@ QTextDocument *Editing::document() const {
     return m_document ? m_document->textDocument() : nullptr;
 }
 
-// Puts back the */ that commenting a CSS line escaped as *\/, between two
-// positions, from the end so earlier positions stay put.
-static void unescapeClosings(QTextCursor &cursor, int from, int to) {
-    QTextDocument *doc = cursor.document();
-    for (int at = to - 3; at >= from; --at) {
-        if (doc->characterAt(at) == '*' && doc->characterAt(at + 1) == '\\' && doc->characterAt(at + 2) == '/') {
-            cursor.setPosition(at + 1);
-            cursor.setPosition(at + 2, QTextCursor::KeepAnchor);
+// CSS comments don't nest, so a */ inside a line being commented would end
+// the comment there. Each * followed by backslashes and a / gets one more
+// backslash while commented (*/ becomes *\/, *\/ becomes *\\/) and loses
+// one when uncommented, so nothing that was there is ever lost.
+static const QRegularExpression Closing(QStringLiteral(R"(\*(\\*)/)"));
+
+// Adds (or with `remove`, takes away) that backslash in a line's text from
+// `from` to `to`, last first, so earlier positions stay put.
+static void escapeClosings(QTextCursor &cursor, int block, const QString &text, int from, int to, bool remove) {
+    QList<int> at;
+    for (auto matches = Closing.globalMatch(text.left(to)); matches.hasNext();) {
+        const auto match = matches.next();
+        if (match.capturedStart() >= from && (!remove || match.capturedLength(1) > 0))
+            at.prepend(match.capturedStart() + 1);
+    }
+    for (int position : at) {
+        cursor.setPosition(block + position);
+        if (remove) {
+            cursor.setPosition(block + position + 1, QTextCursor::KeepAnchor);
             cursor.removeSelectedText();
+        } else {
+            cursor.insertText(QStringLiteral("\\"));
         }
     }
 }
@@ -94,7 +109,7 @@ void Editing::toggleComment(int start, int end) {
                 cursor.setPosition(block.position() + text.size(), QTextCursor::KeepAnchor);
                 cursor.removeSelectedText();
                 // The closings inside it, escaped when it was commented.
-                unescapeClosings(cursor, block.position() + at + length, block.position() + text.size() - cut);
+                escapeClosings(cursor, block.position(), text, at + length, int(text.size()) - cut, true);
             }
             cursor.setPosition(block.position() + at);
             cursor.setPosition(block.position() + at + length, QTextCursor::KeepAnchor);
@@ -103,13 +118,7 @@ void Editing::toggleComment(int start, int end) {
             if (!suffix.isEmpty()) {
                 cursor.setPosition(block.position() + text.size());
                 cursor.insertText(suffix);
-                // CSS comments don't nest: a */ already in the line would end
-                // the new comment there and leave the rest live. Escaped as
-                // *\/ while commented, and put back when uncommented.
-                for (int at = text.lastIndexOf("*/"); at >= 0; at = at > 0 ? text.lastIndexOf("*/", at - 1) : -1) {
-                    cursor.setPosition(block.position() + at + 1);
-                    cursor.insertText("\\");
-                }
+                escapeClosings(cursor, block.position(), text, column, int(text.size()), false);
             }
             cursor.setPosition(block.position() + column);
             cursor.insertText(prefix + " ");

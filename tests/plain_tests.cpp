@@ -1951,6 +1951,13 @@ private slots:
             QCOMPARE(Highlighter::tokens("css", {commented}), QString(commented.size(), 'c'));
             editing.toggleComment(0, 0);
             QCOMPARE(text(), QString("/* bar */ .bar { color: red; }\n"));
+            // A *\/ that was already there comes back as it was.
+            write(css, ".x::after { content: \"*\\/ and */\"; }\n");
+            QVERIFY(doc.open(css));
+            editing.toggleComment(0, 0);
+            QCOMPARE(Highlighter::tokens("css", {text().trimmed()}), QString(text().trimmed().size(), 'c'));
+            editing.toggleComment(0, 0);
+            QCOMPARE(text(), QString(".x::after { content: \"*\\/ and */\"; }\n"));
             QVERIFY(doc.open(path));
         }
 

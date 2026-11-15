@@ -231,8 +231,9 @@ Rectangle {
                 readonly property bool open: !folder && path === doc.path
                 readonly property color ink: open ? theme.brightForeground : theme.foreground
 
-                // Short of the scrollbar, so it never sits over a row's color.
-                width: ListView.view.width - (listBar.visible ? listBar.width : 0)
+                // Short of the scrollbar's thumb, not its padded track, so the
+                // inset to it matches the inset from the sidebar's edge.
+                width: ListView.view.width - (listBar.visible ? listBar.width - listBar.leftPadding : 0)
                 height: Math.round(theme.textSize * 2)
 
                 // Every row's color and ring sit inset by the same margin on

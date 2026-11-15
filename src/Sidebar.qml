@@ -73,13 +73,16 @@ Rectangle {
     }
 
     // Rename, Duplicate and Delete for a row: right-click, or Alt+Return
-    // (or the menu key) in the files, which puts it below the row.
-    function openMenu(row, item, x, y) {
+    // (or the menu key) in the files, which puts it below the row with
+    // Rename picked, ready for Enter.
+    function openMenu(row, item, x, y, fromKeys) {
         if (row < 0)
             return
         list.currentIndex = row
         rowMenu.path = files.pathAt(row)
         rowMenu.popup(item, x, y)
+        if (fromKeys)
+            rowMenu.currentIndex = 0
     }
 
     // A folder folds open or closed; a file opens.
@@ -181,7 +184,7 @@ Rectangle {
                 } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && (event.modifiers & Qt.AltModifier)
                            || event.key === Qt.Key_Menu) {
                     if (list.currentItem)
-                        sidebar.openMenu(row, list.currentItem, 24, list.currentItem.height)
+                        sidebar.openMenu(row, list.currentItem, 24, list.currentItem.height, true)
                 } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                     sidebar.activate(row)
                 } else if (event.key === Qt.Key_F2) {
@@ -305,7 +308,7 @@ Rectangle {
                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                     onClicked: function(mouse) {
                         if (mouse.button === Qt.RightButton)
-                            sidebar.openMenu(row.index, row, mouse.x, mouse.y)
+                            sidebar.openMenu(row.index, row, mouse.x, mouse.y, false)
                         else
                             sidebar.activate(row.index)
                     }

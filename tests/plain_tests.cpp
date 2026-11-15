@@ -1421,8 +1421,8 @@ private slots:
         plain.key(Qt::Key_A);
         plain.key(Qt::Key_Return, Qt::AltModifier);
         QTRY_VERIFY(plain.item("rowMenu")->property("opened").toBool());
-        // Down to Duplicate.
-        plain.key(Qt::Key_Down);
+        // Rename is already picked; Down to Duplicate.
+        QCOMPARE(plain.item("rowMenu")->property("currentIndex").toInt(), 0);
         plain.key(Qt::Key_Down);
         plain.key(Qt::Key_Return);
         QTRY_VERIFY(QFileInfo::exists(plain.path("root/a copy.conf")));

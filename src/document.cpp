@@ -230,6 +230,61 @@ bool Document::open(const QString &path) {
     return load(false);
 }
 
+void Document::close() {
+    m_debounce.stop();
+    m_path.clear();
+    m_target.clear();
+    forgetDisk();
+    m_bom = m_crlf = false;
+    m_allowLarge = false;
+    m_locked = false;
+    m_editable = true;
+    if (m_document)
+        setText({}, false);
+    m_indentUnit = "    ";
+    watch();
+    setProblem(Problem::None);
+    emit fileChanged();
+    emit modifiedChanged();
+}
+
+// `from` as it was before the move, through any links in its folder.
+static QString canonicalBefore(const QString &from) {
+    const QFileInfo info(from);
+    const QString folder = QFileInfo(info.absolutePath()).canonicalFilePath();
+    return folder.isEmpty() ? QString() : QDir::cleanPath(folder + "/" + info.fileName());
+}
+
+void Document::relocate(const QString &from, const QString &to) {
+    if (m_path.isEmpty())
+        return;
+    const QString oldFrom = canonicalBefore(from);
+    const QString newFrom = QFileInfo(to).canonicalFilePath();
+    auto moved = [](const QString &path, const QString &before, const QString &after) {
+        if (path == before)
+            return after;
+        if (!before.isEmpty() && path.startsWith(before + "/"))
+            return after + path.mid(before.size());
+        return QString();
+    };
+    const QString path = moved(m_path, QFileInfo(from).absoluteFilePath(), QFileInfo(to).absoluteFilePath());
+    if (path.isEmpty())
+        return;
+    m_path = path;
+    // The file Save writes to follows only if it was itself what moved, or
+    // inside it. A link moved away from its file may point somewhere else
+    // now (a relative one does), so its file stays the target and Save asks,
+    // as for any retargeted link. The version seen keeps its stamp: a rename
+    // keeps the file's, so a change made just before the move still shows.
+    if (const QString target = moved(m_target, oldFrom, newFrom); !target.isEmpty())
+        m_target = target;
+    // A new name can mean a new language, as with Save As.
+    if (m_document)
+        setLanguageFor(m_path, m_document->firstBlock().text());
+    watch();
+    emit fileChanged();
+}
+
 // After a reload refused the file, the editor still holds the text and its
 // undo history, so opening it anyway is an undoable reload too.
 void Document::openAnyway() {

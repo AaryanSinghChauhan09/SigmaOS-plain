@@ -14,9 +14,16 @@ Rectangle {
         ["Ctrl + S", qsTr("Save")],
         ["Ctrl + Shift + S", qsTr("Save as")],
         ["Ctrl + O", qsTr("Open")],
+        ["Ctrl + N", qsTr("New file, or new window")],
+        ["Ctrl + Shift + N", qsTr("New folder")],
+        ["Ctrl + B", qsTr("Show or hide files")],
+        ["Ctrl + Tab", qsTr("Between files and text")],
+        ["F2", qsTr("Rename in files")],
+        ["Delete", qsTr("Delete from files")],
+        ["Alt + Enter", qsTr("Rename, duplicate or delete in files")],
         ["Ctrl + Z / Ctrl + Shift + Z", qsTr("Undo / redo")],
         ["Ctrl + F", qsTr("Find")],
-        ["Ctrl + H", qsTr("Find and replace")],
+        ["Ctrl + H", qsTr("Find and replace (in files: hidden files)")],
         ["Enter / Shift + Enter", qsTr("Next / previous match")],
         ["Ctrl + Enter", qsTr("Replace all")],
         ["Ctrl + G", qsTr("Go to line")],
@@ -33,7 +40,9 @@ Rectangle {
     DialogBackground {
         anchors.centerIn: parent
         width: Math.min(parent.width - 64, 560)
-        height: content.implicitHeight + 56
+        // As tall as the list, or as the window allows, with the rest a
+        // scroll away.
+        height: Math.min(parent.height - 48, title.implicitHeight + content.spacing + grid.implicitHeight + 56)
 
         ColumnLayout {
             id: content
@@ -41,9 +50,20 @@ Rectangle {
             anchors.margins: 28
             spacing: 14
 
-            Label { text: qsTr("Keyboard shortcuts"); color: theme.brightForeground; font.pixelSize: Math.round(theme.textSize * 1.333); font.weight: Font.DemiBold }
+            Label { id: title; text: qsTr("Keyboard shortcuts"); color: theme.brightForeground; font.pixelSize: Math.round(theme.textSize * 1.333); font.weight: Font.DemiBold }
+
+            Flickable {
+                id: list
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                contentHeight: grid.implicitHeight
+                boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: ScrollBar { policy: list.visibleArea.heightRatio < 1 ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff }
 
             GridLayout {
+                id: grid
+                width: list.width
                 columns: 2
                 rowSpacing: 10
                 columnSpacing: 28
@@ -70,6 +90,7 @@ Rectangle {
                         color: theme.foreground
                     }
                 }
+            }
             }
         }
     }

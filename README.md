@@ -60,7 +60,7 @@ The sidebar shows a folder's files: the folder Plain was opened on, or the open 
 | Ctrl+W | Close |
 | F1 | Every shortcut |
 
-Text starts at the desktop's text size, the one Omarchy's display panel sets (12px, the terminals' 9pt), and follows it when it changes. Ctrl+Plus and Ctrl+Minus adjust from there, and that adjustment and word wrap are remembered in `~/.config/plain/settings.conf`. Nothing else is a setting.
+Text starts at the desktop's text size, the one Omarchy's display panel sets (12px, the terminals' 9pt), and follows it when it changes. Ctrl+Plus and Ctrl+Minus adjust from there, and that adjustment and word wrap (on to start with; Alt+Z turns it off) are remembered in `~/.config/plain/settings.conf`. Nothing else is a setting.
 
 ## Install
 

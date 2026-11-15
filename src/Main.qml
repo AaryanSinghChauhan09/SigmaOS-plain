@@ -41,7 +41,7 @@ ApplicationWindow {
         // Px above or below the desktop's text size, so the editor keeps
         // following Omarchy's Text size slider after Ctrl+Plus or Ctrl+Minus.
         property int zoom: 0
-        property bool wrap: false
+        property bool wrap: true
     }
 
     readonly property int textSize: Math.max(8, Math.min(48, theme.textSize + settings.zoom))

@@ -317,12 +317,17 @@ ApplicationWindow {
                 if (visible) {
                     returnFocus = win.activeFocusItem
                     forceActiveFocus()
-                } else if (returnFocus) {
-                    returnFocus.forceActiveFocus()
-                } else {
-                    editor.focusText()
+                } else if (activeFocus) {
+                    // Closed with the keys still on it: back where they were.
+                    if (returnFocus)
+                        returnFocus.forceActiveFocus()
+                    else
+                        editor.focusText()
                 }
             }
+            // Anything else taking the keys, like Ctrl+B or Ctrl+F, closes it,
+            // so typing can never reach the text behind it.
+            onActiveFocusChanged: if (!activeFocus && visible) win.helpVisible = false
             onDismissed: win.helpVisible = false
         }
     }

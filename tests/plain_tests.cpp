@@ -1157,6 +1157,10 @@ private slots:
         QVERIFY(!QFileInfo(copy).isSymLink());
         QCOMPARE(read(copy), QByteArray("real\n"));
         QVERIFY(tree.duplicate(dir.filePath("root/dangling.lua")).contains("error"));
+        // A link to a folder the copy would land in can't copy itself.
+        QVERIFY(QFile::link(dir.filePath("root"), dir.filePath("root/up")));
+        QVERIFY(tree.duplicate(dir.filePath("root/up")).contains("error"));
+        QVERIFY(!QFileInfo::exists(dir.filePath("root/up copy")));
     }
 
     // Another file never brings the last one's edits back with Ctrl+Z, even
@@ -1701,6 +1705,18 @@ private slots:
         plain.key(Qt::Key_F1);
         QVERIFY(!plain.item("help")->property("visible").toBool());
         QTRY_VERIFY(plain.editorFocused());
+
+        // A shortcut that takes the keys elsewhere closes it, rather than
+        // leaving it up with typing reaching the text behind.
+        plain.key(Qt::Key_B, Qt::ControlModifier);
+        QTRY_VERIFY(plain.sidebar()->property("treeFocused").toBool());
+        plain.key(Qt::Key_F1);
+        QVERIFY(plain.item("help")->property("visible").toBool());
+        plain.key(Qt::Key_B, Qt::ControlModifier);
+        QTRY_VERIFY(plain.editorFocused());
+        QVERIFY(!plain.item("help")->property("visible").toBool());
+        plain.type("q");
+        QVERIFY(plain.doc.modified());
     }
 
     // Go to line reads numbers as the language writes them.
@@ -1929,7 +1945,10 @@ private slots:
             write(css, "/* bar */ .bar { color: red; }\n");
             QVERIFY(doc.open(css));
             editing.toggleComment(0, 0);
-            QCOMPARE(text(), QString("/* /* bar */ .bar { color: red; } */\n"));
+            // The */ inside is escaped, so the whole line is one comment.
+            QCOMPARE(text(), QString("/* /* bar *\\/ .bar { color: red; } */\n"));
+            const QString commented = text().trimmed();
+            QCOMPARE(Highlighter::tokens("css", {commented}), QString(commented.size(), 'c'));
             editing.toggleComment(0, 0);
             QCOMPARE(text(), QString("/* bar */ .bar { color: red; }\n"));
             QVERIFY(doc.open(path));

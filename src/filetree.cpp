@@ -378,6 +378,10 @@ QVariantMap FileTree::duplicate(const QString &source) {
     const QString original = info.isSymLink() ? info.canonicalFilePath() : from;
     if (original.isEmpty())
         return {{"error", tr("%1 points at nothing to duplicate").arg(name)}};
+    // A link to a folder the copy would land in would copy itself forever.
+    const QString copyIn = QFileInfo(info.absolutePath()).canonicalFilePath();
+    if (copyIn == original || copyIn.startsWith(original + "/"))
+        return {{"error", tr("%1 can't be duplicated inside itself").arg(name)}};
     std::error_code error;
     std::filesystem::copy(QFile::encodeName(original).constData(), QFile::encodeName(to).constData(),
                           std::filesystem::copy_options::recursive | std::filesystem::copy_options::copy_symlinks,

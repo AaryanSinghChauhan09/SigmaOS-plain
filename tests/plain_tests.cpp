@@ -1085,7 +1085,7 @@ private slots:
         append(&text, "edit\n");
 
         QVERIFY(QDir().rename(dir.filePath("x.lua"), dir.filePath("into/x.lua")));
-        doc.relocate(dir.filePath("into/x.lua"));
+        doc.relocate(dir.filePath("x.lua"), dir.filePath("into/x.lua"));
         QCOMPARE(doc.path(), dir.filePath("into/x.lua"));
         QVERIFY(doc.modified());
         QVERIFY(doc.save());
@@ -1151,7 +1151,7 @@ private slots:
     {
         QTemporaryDir dir;
         QDir(dir.path()).mkpath("root");
-        for (const char *name : {"autostart.lua", "bindings.lua", "input.lua"})
+        for (const char *name : {"autostart.lua", "bindings.lua", "bluetooth.conf", "input.lua"})
             write(dir.filePath(QString("root/") + name), "");
         write(dir.filePath("Harness.qml"),
               "import QtQuick\nimport \"file://" + QFile::encodeName(sourceFolder()) + "\"\n"
@@ -1180,10 +1180,16 @@ private slots:
         QVERIFY(sidebar);
         QTRY_VERIFY(sidebar->property("treeFocused").toBool());
 
+        // The same letter again steps to the next name it starts.
+        QTest::keyClick(&view, Qt::Key_B);
+        QCOMPARE(sidebar->property("currentPath").toString(), QDir::cleanPath(dir.filePath("root/bindings.lua")));
+        QTest::keyClick(&view, Qt::Key_B);
+        QCOMPARE(sidebar->property("currentPath").toString(), QDir::cleanPath(dir.filePath("root/bluetooth.conf")));
+        QTest::qWait(900);
         QTest::keyClick(&view, Qt::Key_I);
         QTRY_COMPARE(sidebar->property("currentPath").toString(), QDir::cleanPath(dir.filePath("root/input.lua")));
         pressDelete(&view);
-        QCOMPARE(view.rootObject()->property("asked").toInt(), 2);
+        QCOMPARE(view.rootObject()->property("asked").toInt(), 3);
         QVERIFY(QFileInfo::exists(dir.filePath("root/input.lua")));
     }
 
@@ -1203,11 +1209,34 @@ private slots:
         append(&text, "edit\n");
 
         QVERIFY(QDir().rename(dir.filePath("link.conf"), dir.filePath("into/link.conf")));
-        doc.relocate(dir.filePath("into/link.conf"));
+        doc.relocate(dir.filePath("link.conf"), dir.filePath("into/link.conf"));
         QVERIFY(!doc.save());
         QCOMPARE(doc.problem(), QString("Retargeted"));
         QCOMPARE(read(dir.filePath("into/real.conf")), QByteArray("same\n"));
         QCOMPARE(read(dir.filePath("real.conf")), QByteArray("same\n"));
+    }
+
+    // A folder moved with both a link and its file in it: still the same
+    // file, so Save writes it without asking.
+    void aLinkMovedWithItsFileStillSaves()
+    {
+        QTemporaryDir dir;
+        QDir(dir.path()).mkpath("configs");
+        QDir(dir.path()).mkpath("into");
+        write(dir.filePath("configs/real.conf"), "a\n");
+        QVERIFY(QFile::link("real.conf", dir.filePath("configs/link.conf")));
+        QTextDocument text;
+        Document doc;
+        doc.attachDocument(&text);
+        QVERIFY(doc.open(dir.filePath("configs/link.conf")));
+        append(&text, "b\n");
+
+        QVERIFY(QDir().rename(dir.filePath("configs"), dir.filePath("into/configs")));
+        doc.relocate(dir.filePath("configs"), dir.filePath("into/configs"));
+        QCOMPARE(doc.path(), dir.filePath("into/configs/link.conf"));
+        QVERIFY2(doc.save(), qPrintable(doc.problem()));
+        QCOMPARE(read(dir.filePath("into/configs/real.conf")), QByteArray("a\nb\n"));
+        QVERIFY(QFileInfo(dir.filePath("into/configs/link.conf")).isSymLink());
     }
 
     void revealsUnderTheRootFolder()
@@ -1257,6 +1286,26 @@ private slots:
         plain.key(Qt::Key_Tab, Qt::ControlModifier);
         QVERIFY(!plain.window->property("sidebarVisible").toBool());
         QVERIFY(plain.editorFocused());
+    }
+
+    // Space opens a file and keeps the keys in the files, even when the
+    // open file's unsaved changes are asked about first.
+    void spaceOpensAndStaysAfterTheUnsavedQuestion()
+    {
+        PlainWindow plain;
+        QVERIFY(plain.load("root/b.conf", ""));
+        plain.type("x");
+        QVERIFY(plain.doc.modified());
+        plain.key(Qt::Key_B, Qt::ControlModifier);
+        QTRY_VERIFY(plain.sidebar()->property("treeFocused").toBool());
+        plain.key(Qt::Key_A);
+        plain.key(Qt::Key_Space);
+        QTRY_VERIFY(plain.item("unsaved")->property("opened").toBool());
+        // The question has the keys: Enter saves.
+        plain.key(Qt::Key_Return);
+        QTRY_COMPARE(plain.doc.path(), plain.path("root/a.conf"));
+        QCOMPARE(read(plain.path("root/b.conf")), QByteArray("xb\n"));
+        QTRY_VERIFY(plain.sidebar()->property("treeFocused").toBool());
     }
 
     void anUntitledDocumentNeverAsksForAFile()

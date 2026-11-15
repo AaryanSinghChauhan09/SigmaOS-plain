@@ -248,17 +248,36 @@ void Document::close() {
     emit modifiedChanged();
 }
 
-void Document::relocate(const QString &path) {
+// `from` as it was before the move, through any links in its folder.
+static QString canonicalBefore(const QString &from) {
+    const QFileInfo info(from);
+    const QString folder = QFileInfo(info.absolutePath()).canonicalFilePath();
+    return folder.isEmpty() ? QString() : QDir::cleanPath(folder + "/" + info.fileName());
+}
+
+void Document::relocate(const QString &from, const QString &to) {
     if (m_path.isEmpty())
         return;
-    m_path = QFileInfo(path).absoluteFilePath();
-    // A moved file is still the file opened, so Save follows it. A moved
-    // link may point somewhere else now (a relative one does), so the file
-    // it pointed at stays the target and Save asks, as for any retargeted
-    // link. The version seen is kept as it was: a rename keeps the file's
-    // stamp, so a change made just before the move is still noticed.
-    if (!QFileInfo(m_path).isSymLink())
-        m_target = currentTarget();
+    const QString oldFrom = canonicalBefore(from);
+    const QString newFrom = QFileInfo(to).canonicalFilePath();
+    auto moved = [](const QString &path, const QString &before, const QString &after) {
+        if (path == before)
+            return after;
+        if (!before.isEmpty() && path.startsWith(before + "/"))
+            return after + path.mid(before.size());
+        return QString();
+    };
+    const QString path = moved(m_path, QFileInfo(from).absoluteFilePath(), QFileInfo(to).absoluteFilePath());
+    if (path.isEmpty())
+        return;
+    m_path = path;
+    // The file Save writes to follows only if it was itself what moved, or
+    // inside it. A link moved away from its file may point somewhere else
+    // now (a relative one does), so its file stays the target and Save asks,
+    // as for any retargeted link. The version seen keeps its stamp: a rename
+    // keeps the file's, so a change made just before the move still shows.
+    if (const QString target = moved(m_target, oldFrom, newFrom); !target.isEmpty())
+        m_target = target;
     watch();
     emit fileChanged();
 }

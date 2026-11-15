@@ -100,7 +100,7 @@ public:
     // The file was moved from the sidebar: the same file, with its edits
     // and the version seen kept, at a new path. A moved link keeps the
     // file it pointed at, so Save asks if it points elsewhere now.
-    Q_INVOKABLE void relocate(const QString &path);
+    Q_INVOKABLE void relocate(const QString &from, const QString &to);
     // Saves to the current file; false with a problem set when it didn't.
     Q_INVOKABLE bool save();
     Q_INVOKABLE bool saveAsUrl(const QUrl &url);

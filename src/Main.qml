@@ -30,6 +30,8 @@ ApplicationWindow {
     // "open", or "openPath" for the file picked in the sidebar.
     property string pendingAction: ""
     property string pendingPath: ""
+    // Whether the keys go back to the files once pendingPath is open.
+    property bool pendingStay: false
     // Set once the user agreed to lose changes, so closing doesn't ask again.
     property bool discardConfirmed: false
 
@@ -93,17 +95,20 @@ ApplicationWindow {
             discardConfirmed = false
             doc.open(pendingPath)
             editor.goToLine(1)
+            if (pendingStay)
+                sidebar.focusTree()
         }
     }
 
     function folderOf(path) { return path.substring(0, path.lastIndexOf("/")) || "/" }
 
     // A file picked in the sidebar, asking first about unsaved changes.
-    function openPath(path) {
+    function openPath(path, stay) {
         if (path === doc.path) {
-            editor.focusText()
+            stay ? sidebar.focusTree() : editor.focusText()
             return
         }
+        pendingStay = !!stay
         pendingPath = path
         request("openPath")
     }
@@ -225,7 +230,7 @@ ApplicationWindow {
                 visible: win.sidebarVisible
                 Layout.fillHeight: true
                 Layout.preferredWidth: preferredWidth
-                onOpenRequested: function(path) { win.openPath(path) }
+                onOpenRequested: function(path, stay) { win.openPath(path, stay) }
                 onDeleteRequested: function(row) { deleteConfirm.ask(row) }
                 onHideRequested: win.hideSidebar()
                 onDone: editor.focusText()
@@ -513,6 +518,7 @@ ApplicationWindow {
     // type into here, so the bare letter is enough.
     Popup {
         id: unsaved
+        objectName: "unsaved"
         anchors.centerIn: parent
         width: Math.min(440, win.width - 48)
         modal: true

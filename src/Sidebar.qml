@@ -11,7 +11,8 @@ import QtQuick.Layouts
 Rectangle {
     id: sidebar
 
-    signal openRequested(string path)
+    // A file to open, and whether the keys stay in the tree once it's open.
+    signal openRequested(string path, bool stay)
     // Delete on a row: Main asks first.
     signal deleteRequested(int row)
     signal hideRequested()
@@ -57,10 +58,9 @@ Rectangle {
             moveError.visible = true
             return
         }
-        const to = moved.path
-        if (from !== to && (doc.path === from || doc.path.startsWith(from + "/")))
-            doc.relocate(to + doc.path.substring(from.length))
-        reveal(to)
+        if (moved.path !== from)
+            doc.relocate(from, moved.path)
+        reveal(moved.path)
     }
 
     // A folder folds open or closed; a file opens. Opened with Space, the
@@ -73,17 +73,17 @@ Rectangle {
             files.toggle(row)
             focusTree()
         } else {
-            sidebar.openRequested(files.pathAt(row))
-            if (stay)
-                Qt.callLater(focusTree)
+            sidebar.openRequested(files.pathAt(row), stay)
         }
     }
 
     function jumpTo(text) {
-        typed = typed + text.toLowerCase()
+        const letter = text.toLowerCase()
+        // The same letter again steps to the next name it starts, rather
+        // than looking for a name starting with it twice.
+        typed = typed === letter ? letter : typed + letter
         typingPause.restart()
-        // A first letter looks past the row the keys are on, so pressing it
-        // again steps through the names it starts.
+        // A first letter looks past the row the keys are on.
         const start = typed.length === 1 ? list.currentIndex + 1 : list.currentIndex
         const row = files.find(typed, start)
         if (row >= 0) {

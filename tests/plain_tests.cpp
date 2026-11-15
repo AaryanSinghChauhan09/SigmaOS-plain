@@ -1439,6 +1439,34 @@ private slots:
         QTRY_VERIFY(plain.sidebar()->property("treeFocused").toBool());
     }
 
+    // Ctrl+F and Ctrl+H open the find bar in their mode, switch it, or
+    // close it when it's already what's open.
+    void ctrlFAndCtrlHToggleTheFindBar()
+    {
+        PlainWindow plain;
+        QVERIFY(plain.load("root/b.conf", ""));
+        QObject *bar = plain.item("findBar");
+        plain.key(Qt::Key_F, Qt::ControlModifier);
+        QVERIFY(bar->property("visible").toBool());
+        QVERIFY(!bar->property("replacing").toBool());
+        plain.key(Qt::Key_F, Qt::ControlModifier);
+        QVERIFY(!bar->property("visible").toBool());
+        QTRY_VERIFY(plain.editorFocused());
+
+        plain.key(Qt::Key_H, Qt::ControlModifier);
+        QVERIFY(bar->property("visible").toBool());
+        QVERIFY(bar->property("replacing").toBool());
+        // Ctrl+F from replace narrows to find; Ctrl+H again widens.
+        plain.key(Qt::Key_F, Qt::ControlModifier);
+        QVERIFY(bar->property("visible").toBool());
+        QVERIFY(!bar->property("replacing").toBool());
+        plain.key(Qt::Key_H, Qt::ControlModifier);
+        QVERIFY(bar->property("replacing").toBool());
+        plain.key(Qt::Key_H, Qt::ControlModifier);
+        QVERIFY(!bar->property("visible").toBool());
+        QTRY_VERIFY(plain.editorFocused());
+    }
+
     void anUntitledDocumentNeverAsksForAFile()
     {
         PlainWindow plain;

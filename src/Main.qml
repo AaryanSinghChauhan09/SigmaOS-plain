@@ -140,13 +140,13 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+Shift+S"; context: Qt.ApplicationShortcut; onActivated: win.saveAs() }
     Shortcut { sequence: "Ctrl+O"; context: Qt.ApplicationShortcut; onActivated: win.request("open") }
     Shortcut { sequences: ["Ctrl+W", "Ctrl+Q"]; context: Qt.ApplicationShortcut; onActivated: win.request("close") }
-    Shortcut { sequence: "Ctrl+F"; context: Qt.ApplicationShortcut; onActivated: findBar.show(false) }
+    Shortcut { sequence: "Ctrl+F"; context: Qt.ApplicationShortcut; onActivated: findBar.toggle(false) }
     // In the files, Ctrl+H shows or hides hidden files; in the text, it's
     // find and replace.
     Shortcut {
         sequence: "Ctrl+H"
         context: Qt.ApplicationShortcut
-        onActivated: sidebar.treeFocused ? files.showHidden = !files.showHidden : findBar.show(true)
+        onActivated: sidebar.treeFocused ? files.showHidden = !files.showHidden : findBar.toggle(true)
     }
     Shortcut { sequences: ["F3", StandardKey.FindNext]; context: Qt.ApplicationShortcut; onActivated: findBar.next(false) }
     Shortcut { sequences: ["Shift+F3", StandardKey.FindPrevious]; context: Qt.ApplicationShortcut; onActivated: findBar.next(true) }

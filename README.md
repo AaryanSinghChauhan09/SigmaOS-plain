@@ -59,8 +59,8 @@ The sidebar shows a folder's files: the folder Plain was opened on, or the open 
 | F2 | Rename the picked file |
 | Alt+Enter | Rename, duplicate or delete the picked file |
 | Ctrl+Z / Ctrl+Shift+Z | Undo / redo |
-| Ctrl+F | Find |
-| Ctrl+H | Find and replace; in the files, show or hide hidden files |
+| Ctrl+F | Find, or close it |
+| Ctrl+H | Find and replace, or close it; in the files, show or hide hidden files |
 | Enter / Shift+Enter | Next / previous match |
 | Ctrl+G | Go to line |
 | Ctrl+/ | Comment or uncomment |

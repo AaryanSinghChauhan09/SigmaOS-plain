@@ -26,6 +26,7 @@ Rectangle {
         ["Ctrl + H", qsTr("Find and replace (in files: hidden files)")],
         ["Enter / Shift + Enter", qsTr("Next / previous match")],
         ["Ctrl + Enter", qsTr("Replace all")],
+        ["Page Up / Page Down", qsTr("A screenful up or down")],
         ["Ctrl + G", qsTr("Go to line")],
         ["Ctrl + /", qsTr("Comment or uncomment")],
         ["Tab / Shift + Tab", qsTr("Indent / outdent")],
@@ -59,7 +60,7 @@ Rectangle {
                 clip: true
                 contentHeight: grid.implicitHeight
                 boundsBehavior: Flickable.StopAtBounds
-                ScrollBar.vertical: ScrollBar { policy: list.visibleArea.heightRatio < 1 ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff }
+                ScrollBar.vertical: ThinScrollBar { ratio: list.visibleArea.heightRatio }
 
             GridLayout {
                 id: grid

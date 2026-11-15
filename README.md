@@ -62,6 +62,7 @@ The sidebar shows a folder's files: the folder Plain was opened on, or the open 
 | Ctrl+F | Find, or close it |
 | Ctrl+H | Find and replace, or close it; in the files, show or hide hidden files |
 | Enter / Shift+Enter | Next / previous match |
+| Page Up / Page Down | A screenful up or down (with Shift, selecting) |
 | Ctrl+G | Go to line |
 | Ctrl+/ | Comment or uncomment |
 | Tab / Shift+Tab | Indent / outdent |

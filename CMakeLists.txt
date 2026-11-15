@@ -21,8 +21,24 @@ target_link_libraries(plain_core PUBLIC
   Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::DBus)
 target_compile_options(plain_core PUBLIC -Wall -Wextra)
 
+# The version comes from the release, never from the code: a tag's tarball
+# unpacks as plain-<version>, and a checkout asks git.
+get_filename_component(source_dir_name "${CMAKE_CURRENT_SOURCE_DIR}" NAME)
+if(source_dir_name MATCHES "^plain-([0-9][0-9.]*)$")
+  set(PLAIN_VERSION "${CMAKE_MATCH_1}")
+else()
+  execute_process(COMMAND git describe --tags --always --dirty
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    OUTPUT_VARIABLE PLAIN_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+  string(REGEX REPLACE "^v" "" PLAIN_VERSION "${PLAIN_VERSION}")
+  if(NOT PLAIN_VERSION)
+    set(PLAIN_VERSION dev)
+  endif()
+endif()
+
 add_executable(plain src/main.cpp src/resources.qrc)
 target_link_libraries(plain PRIVATE plain_core)
+target_compile_definitions(plain PRIVATE PLAIN_VERSION="${PLAIN_VERSION}")
 
 enable_testing()
 add_executable(plain_tests tests/plain_tests.cpp)
@@ -34,4 +50,5 @@ set_tests_properties(plain_tests PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscree
 add_test(NAME plain_version_without_display
   COMMAND ${CMAKE_COMMAND} -E env --unset=QT_QPA_PLATFORM --unset=WAYLAND_DISPLAY --unset=DISPLAY
           $<TARGET_FILE:plain> --version)
-set_tests_properties(plain_version_without_display PROPERTIES PASS_REGULAR_EXPRESSION "^plain [0-9]")
+# A checkout without tags reports git's commit or "dev" rather than a number.
+set_tests_properties(plain_version_without_display PROPERTIES PASS_REGULAR_EXPRESSION "^plain [0-9a-z]")

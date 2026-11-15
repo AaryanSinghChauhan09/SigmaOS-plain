@@ -252,9 +252,13 @@ void Document::relocate(const QString &path) {
     if (m_path.isEmpty())
         return;
     m_path = QFileInfo(path).absoluteFilePath();
-    m_target = currentTarget();
-    if (!m_diskHash.isEmpty())
-        m_diskStamp = stamp(m_target);
+    // A moved file is still the file opened, so Save follows it. A moved
+    // link may point somewhere else now (a relative one does), so the file
+    // it pointed at stays the target and Save asks, as for any retargeted
+    // link. The version seen is kept as it was: a rename keeps the file's
+    // stamp, so a change made just before the move is still noticed.
+    if (!QFileInfo(m_path).isSymLink())
+        m_target = currentTarget();
     watch();
     emit fileChanged();
 }

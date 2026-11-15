@@ -6,6 +6,15 @@
 #include <QFileInfo>
 #include <algorithm>
 
+// A name in a folder, right at the root too ("/" + "etc", not "//etc").
+static QString joined(const QString &folder, const QString &name) {
+    return QDir::cleanPath(folder + "/" + name);
+}
+
+static QString cleaned(const QString &path) {
+    return QDir::cleanPath(QFileInfo(path).absoluteFilePath());
+}
+
 FileTree::FileTree(QObject *parent) : QAbstractListModel(parent) {
     // Saving a file is several changes in a row (a temporary file, a rename).
     m_debounce.setSingleShot(true);
@@ -135,17 +144,21 @@ void FileTree::collapse(int row) {
     rewatch();
 }
 
+bool FileTree::inTree(const QString &clean) const {
+    return !m_root.isEmpty() && clean != m_root && clean.startsWith(m_root == "/" ? m_root : m_root + "/");
+}
+
 int FileTree::reveal(const QString &path) {
-    if (m_root.isEmpty() || path.isEmpty())
+    if (path.isEmpty())
         return -1;
-    const QString clean = QDir::cleanPath(QFileInfo(path).absoluteFilePath());
-    if (!clean.startsWith(m_root + "/"))
+    const QString clean = cleaned(path);
+    if (!inTree(clean))
         return -1;
     // Each folder between the root and the file, from the top down.
-    const QStringList parts = clean.mid(m_root.size() + 1).split('/');
+    const QStringList parts = QDir(m_root).relativeFilePath(clean).split('/');
     QString folder = m_root;
     for (int i = 0; i + 1 < parts.size(); ++i) {
-        folder += "/" + parts.at(i);
+        folder = joined(folder, parts.at(i));
         const int row = indexOf(folder);
         if (row < 0)
             return -1;
@@ -184,9 +197,10 @@ QString FileTree::pathAt(int row) const {
     return row >= 0 && row < m_rows.size() ? m_rows.at(row).path : QString();
 }
 
-QString FileTree::trash(int row) {
-    const QString path = pathAt(row);
-    if (path.isEmpty())
+QString FileTree::trash(const QString &target) {
+    // By path, not row: the rows can be rebuilt from disk while Delete asks.
+    const QString path = cleaned(target);
+    if (target.isEmpty() || !inTree(path) || !(QFileInfo::exists(path) || QFileInfo(path).isSymLink()))
         return tr("Nothing to delete");
     QFile file(path);
     if (!file.moveToTrash())
@@ -201,36 +215,38 @@ QString FileTree::nameProblem(const QString &folder, const QString &name) const 
         return tr("Give it a name");
     if (name.contains('/') || name == "." || name == "..")
         return tr("A name can't be . or .. or have a / in it");
-    if (QFileInfo::exists(folder + "/" + name) || QFileInfo(folder + "/" + name).isSymLink())
+    if (QFileInfo::exists(joined(folder, name)) || QFileInfo(joined(folder, name)).isSymLink())
         return tr("%1 already exists here").arg(name);
     return {};
 }
 
-QString FileTree::move(int row, const QString &folder) {
-    const QString from = pathAt(row);
-    if (from.isEmpty())
-        return tr("Nothing to move");
-    const QString into = QDir::cleanPath(QFileInfo(folder).absoluteFilePath());
+QVariantMap FileTree::move(const QString &source, const QString &folder) {
+    // By path, not row: the rows can be rebuilt from disk mid-drag.
+    const QString from = cleaned(source);
+    if (source.isEmpty() || !inTree(from) || !(QFileInfo::exists(from) || QFileInfo(from).isSymLink()))
+        return {{"error", tr("Nothing to move")}};
+    const QString into = cleaned(folder);
     if (!QFileInfo(into).isDir())
-        return tr("%1 isn't a folder").arg(into);
+        return {{"error", tr("%1 isn't a folder").arg(into)}};
     if (QFileInfo(from).absolutePath() == into)
-        return {};
+        return {{"path", from}};
     if (into == from || into.startsWith(from + "/"))
-        return tr("A folder can't go inside itself");
-    const QString name = m_rows.at(row).name;
+        return {{"error", tr("A folder can't go inside itself")}};
+    const QString name = QFileInfo(from).fileName();
     if (const QString problem = nameProblem(into, name); !problem.isEmpty())
-        return problem;
+        return {{"error", problem}};
     // A rename, so a folder moves whole and a file keeps its links and
     // permissions. Across file systems it fails rather than half-copying.
-    if (!QDir().rename(from, into + "/" + name))
-        return tr("%1 couldn't be moved there").arg(name);
+    const QString to = joined(into, name);
+    if (!QDir().rename(from, to))
+        return {{"error", tr("%1 couldn't be moved there").arg(name)}};
     if (m_expanded.remove(from))
-        m_expanded.insert(into + "/" + name);
+        m_expanded.insert(to);
     if (into != m_root)
         m_expanded.insert(into);
     m_debounce.stop();
     rebuild();
-    return {};
+    return {{"path", to}};
 }
 
 QString FileTree::folderAt(int row) const {
@@ -243,7 +259,7 @@ QString FileTree::folderAt(int row) const {
 QVariantMap FileTree::create(const QString &folder, const QString &name, bool isFolder) {
     if (const QString problem = nameProblem(folder, name); !problem.isEmpty())
         return {{"error", problem}};
-    const QString path = QDir::cleanPath(folder + "/" + name);
+    const QString path = joined(folder, name);
     bool made;
     if (isFolder) {
         made = QDir().mkdir(path);

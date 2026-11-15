@@ -41,13 +41,13 @@ public:
     // The first row from `from` on, around past the end, whose name starts
     // with `prefix` in any case; -1 when none does.
     Q_INVOKABLE int find(const QString &prefix, int from) const;
-    // Moves a row's file or folder to the trash, so a delete can be undone
-    // from the file manager. Empty when it went, or why it didn't.
-    Q_INVOKABLE QString trash(int row);
-    // Moves a row's file or folder into another folder. Empty when it
-    // moved, or why it didn't: something there already has its name, or
-    // a folder can't go inside itself.
-    Q_INVOKABLE QString move(int row, const QString &folder);
+    // Moves a file or folder in the tree to the trash, so a delete can be
+    // undone from the file manager. Empty when it went, or why it didn't.
+    Q_INVOKABLE QString trash(const QString &path);
+    // Moves a file or folder in the tree into another folder, and returns
+    // {path} where it went or {error}: something there already has its
+    // name, or a folder can't go inside itself.
+    Q_INVOKABLE QVariantMap move(const QString &path, const QString &folder);
 
     // Where a new file or folder goes from a row: into the folder at it, or
     // beside the file at it, or the root with no row.
@@ -74,6 +74,8 @@ private:
     // A folder's rows, with those of its open folders after each.
     QVector<Entry> rowsUnder(const QString &folder, int depth) const;
     void rebuild();
+    // Under the root, as a clean absolute path; the root itself isn't.
+    bool inTree(const QString &clean) const;
     void rewatch();
 
     QString m_root;

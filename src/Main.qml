@@ -272,6 +272,7 @@ ApplicationWindow {
                     // picked. Plain without a file is an untitled document
                     // to type in, so it says nothing there.
                     Label {
+                        objectName: "pickAFile"
                         anchors.centerIn: parent
                         visible: startFolder.length > 0 && win.sidebarVisible && doc.path.length === 0 && editor.area.length === 0
                         text: qsTr("Pick a file")
@@ -309,6 +310,7 @@ ApplicationWindow {
     // question, for where the sidebar's keys are. A file opens once made.
     Popup {
         id: namePrompt
+        objectName: "namePrompt"
         anchors.centerIn: parent
         width: Math.min(440, win.width - 48)
         modal: true
@@ -418,6 +420,7 @@ ApplicationWindow {
     // Escape cancels; C and D pick, with or without Alt, and Enter deletes.
     Popup {
         id: deleteConfirm
+        objectName: "deleteConfirm"
         anchors.centerIn: parent
         width: Math.min(440, win.width - 48)
         modal: true
@@ -428,7 +431,7 @@ ApplicationWindow {
         enter: Transition {}
         exit: Transition {}
 
-        property int row: -1
+        // By path, not row: the rows can be rebuilt from disk while it asks.
         property string path: ""
         property string name: ""
         property bool folder: false
@@ -436,7 +439,6 @@ ApplicationWindow {
         readonly property bool holdsOpenFile: path.length > 0 && (doc.path === path || doc.path.startsWith(path + "/"))
 
         function ask(row) {
-            deleteConfirm.row = row
             path = files.pathAt(row)
             name = path.substring(path.lastIndexOf("/") + 1)
             folder = files.isFolder(row)
@@ -446,7 +448,7 @@ ApplicationWindow {
         function confirm() {
             close()
             const affectsDoc = holdsOpenFile
-            const error = files.trash(row)
+            const error = files.trash(path)
             if (error.length > 0) {
                 pickerError.text = qsTr("Couldn't delete %1: %2").arg(name).arg(error)
             } else if (affectsDoc) {

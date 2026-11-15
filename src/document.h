@@ -97,8 +97,9 @@ public:
     // Back to an empty, untitled document: after its file was deleted from
     // the sidebar, which already asked about losing any unsaved changes.
     Q_INVOKABLE void close();
-    // The file was moved from the sidebar: it's the same file, with its
-    // edits and the version seen kept, at a new path.
+    // The file was moved from the sidebar: the same file, with its edits
+    // and the version seen kept, at a new path. A moved link keeps the
+    // file it pointed at, so Save asks if it points elsewhere now.
     Q_INVOKABLE void relocate(const QString &path);
     // Saves to the current file; false with a problem set when it didn't.
     Q_INVOKABLE bool save();

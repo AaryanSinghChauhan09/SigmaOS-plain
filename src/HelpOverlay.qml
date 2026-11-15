@@ -38,7 +38,9 @@ Rectangle {
     DialogBackground {
         anchors.centerIn: parent
         width: Math.min(parent.width - 64, 560)
-        height: content.implicitHeight + 56
+        // As tall as the list, or as the window allows, with the rest a
+        // scroll away.
+        height: Math.min(parent.height - 48, title.implicitHeight + content.spacing + grid.implicitHeight + 56)
 
         ColumnLayout {
             id: content
@@ -46,9 +48,20 @@ Rectangle {
             anchors.margins: 28
             spacing: 14
 
-            Label { text: qsTr("Keyboard shortcuts"); color: theme.brightForeground; font.pixelSize: Math.round(theme.textSize * 1.333); font.weight: Font.DemiBold }
+            Label { id: title; text: qsTr("Keyboard shortcuts"); color: theme.brightForeground; font.pixelSize: Math.round(theme.textSize * 1.333); font.weight: Font.DemiBold }
+
+            Flickable {
+                id: list
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                contentHeight: grid.implicitHeight
+                boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: ScrollBar { policy: list.visibleArea.heightRatio < 1 ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff }
 
             GridLayout {
+                id: grid
+                width: list.width
                 columns: 2
                 rowSpacing: 10
                 columnSpacing: 28
@@ -75,6 +88,7 @@ Rectangle {
                         color: theme.foreground
                     }
                 }
+            }
             }
         }
     }

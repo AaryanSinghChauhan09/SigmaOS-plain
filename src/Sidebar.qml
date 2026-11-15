@@ -48,17 +48,16 @@ Rectangle {
     // beside the file they're on.
     function newItemFolder() { return files.folderAt(list.currentIndex) }
 
-    // Moves a row into a folder; the open file follows, edits and all.
-    function moveInto(row, folder) {
-        const from = files.pathAt(row)
-        const name = from.substring(from.lastIndexOf("/") + 1)
-        const error = files.move(row, folder)
-        if (error.length > 0) {
-            moveError.text = error
+    // Moves a file or folder into a folder; the open file follows, edits
+    // and all. By path: the rows can be rebuilt from disk mid-drag.
+    function moveInto(from, folder) {
+        const moved = files.move(from, folder)
+        if (moved.error) {
+            moveError.text = moved.error
             moveError.visible = true
             return
         }
-        const to = folder + "/" + name
+        const to = moved.path
         if (from !== to && (doc.path === from || doc.path.startsWith(from + "/")))
             doc.relocate(to + doc.path.substring(from.length))
         reveal(to)
@@ -144,7 +143,7 @@ Rectangle {
                 anchors.fill: parent
                 z: -1
                 keys: ["plain-file"]
-                onDropped: function(drop) { Qt.callLater(sidebar.moveInto, drop.source.row, files.root) }
+                onDropped: function(drop) { Qt.callLater(sidebar.moveInto, drop.source.path, files.root) }
             }
 
             Keys.onPressed: function(event) {
@@ -200,7 +199,7 @@ Rectangle {
                 required property bool expanded
 
                 // Where a row dropped here goes: into a folder, or beside a file.
-                readonly property string dropFolder: folder ? path : path.substring(0, path.lastIndexOf("/"))
+                readonly property string dropFolder: folder ? path : (path.substring(0, path.lastIndexOf("/")) || "/")
 
                 readonly property bool open: !folder && path === doc.path
                 readonly property color ink: open ? theme.brightForeground : theme.foreground
@@ -288,7 +287,7 @@ Rectangle {
                         const at = row.mapToItem(sidebar, 0, 0)
                         dragProxy.x = at.x
                         dragProxy.y = at.y
-                        dragProxy.row = row.index
+                        dragProxy.path = row.path
                         dragProxy.name = row.name
                         dragProxy.folder = row.folder
                         dragProxy.Drag.hotSpot.x = mouse.x
@@ -311,7 +310,7 @@ Rectangle {
                     // this one and the dragged one included.
                     onDropped: function(event) {
                         event.accept()
-                        Qt.callLater(sidebar.moveInto, event.source.row, row.dropFolder)
+                        Qt.callLater(sidebar.moveInto, event.source.path, row.dropFolder)
                     }
                 }
             }
@@ -339,7 +338,7 @@ Rectangle {
     // What's being dragged, following the pointer.
     Rectangle {
         id: dragProxy
-        property int row: -1
+        property string path: ""
         property string name: ""
         property bool folder: false
         visible: Drag.active

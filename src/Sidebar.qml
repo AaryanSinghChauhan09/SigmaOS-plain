@@ -253,22 +253,12 @@ Rectangle {
 
                     Label {
                         anchors.verticalCenter: parent.verticalCenter
-                        width: parent.width - 40 - (dot.visible ? dot.width : 0)
+                        width: parent.width - 40
                         text: row.name
                         textFormat: Text.PlainText
                         elide: Text.ElideRight
                         color: row.ink
                         opacity: row.open ? 1 : 0.85
-                    }
-
-                    // Unsaved, as the title's dot.
-                    Label {
-                        id: dot
-                        visible: row.open && doc.modified
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "●"
-                        color: theme.accent
-                        font.pixelSize: Math.round(theme.textSize * 0.75)
                     }
                 }
 

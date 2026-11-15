@@ -28,6 +28,8 @@ Plain runs in the foreground and exits when its window closes, so it works as `$
 
 ## Files
 
+![Plain opened on ~/.config/hypr, its files beside bindings.lua](docs/sidebar.png)
+
 The sidebar shows a folder's files: the folder Plain was opened on, or the open file's. It's hidden until Ctrl+B or the icon at the left of the footer shows it, and opening Plain on a folder starts with it shown. Folders come first, and the list follows the disk as files come and go. Hidden files stay out of the way until Ctrl+H in the files shows them, and show from the start when the folder is inside a hidden one, like `~/.config/hypr`.
 
 - **Click a file, or Enter on it**, to open it. Unsaved changes are asked about first, as with Ctrl+O.
@@ -37,6 +39,10 @@ The sidebar shows a folder's files: the folder Plain was opened on, or the open 
 - **Delete** asks, then moves the file or folder to the trash, so it can be had back.
 - **F2** renames; the open file follows, edits and all.
 - **Right-click, or Alt+Enter**, for Rename, Duplicate and Delete. Duplicate puts "name copy.ext" beside it, a folder with everything in it.
+
+![The menu for a file: Rename, Duplicate, Delete](docs/sidebar-menu.png)
+
+![Renaming bindings.lua, with the name before the extension picked](docs/rename.png)
 
 ## Keyboard
 

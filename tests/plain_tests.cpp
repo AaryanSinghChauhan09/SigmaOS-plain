@@ -1150,6 +1150,14 @@ private slots:
         doc.relocate(dir.filePath("x.lua"), dir.filePath("into/x.lua"));
         QCOMPARE(doc.path(), dir.filePath("into/x.lua"));
         QVERIFY(doc.modified());
+        QCOMPARE(doc.commentPrefix(), QString("--"));
+
+        // A new extension, a new language.
+        QVERIFY(QDir().rename(dir.filePath("into/x.lua"), dir.filePath("into/x.conf")));
+        doc.relocate(dir.filePath("into/x.lua"), dir.filePath("into/x.conf"));
+        QCOMPARE(doc.commentPrefix(), QString("#"));
+        QVERIFY(QDir().rename(dir.filePath("into/x.conf"), dir.filePath("into/x.lua")));
+        doc.relocate(dir.filePath("into/x.conf"), dir.filePath("into/x.lua"));
         QVERIFY(doc.save());
         QCOMPARE(read(dir.filePath("into/x.lua")), QByteArray("-- x\nedit\n"));
         QVERIFY(!QFileInfo::exists(dir.filePath("x.lua")));

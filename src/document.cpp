@@ -278,6 +278,9 @@ void Document::relocate(const QString &from, const QString &to) {
     // keeps the file's, so a change made just before the move still shows.
     if (const QString target = moved(m_target, oldFrom, newFrom); !target.isEmpty())
         m_target = target;
+    // A new name can mean a new language, as with Save As.
+    if (m_document)
+        setLanguageFor(m_path, m_document->firstBlock().text());
     watch();
     emit fileChanged();
 }

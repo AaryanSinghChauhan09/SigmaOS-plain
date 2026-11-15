@@ -2,7 +2,12 @@
 #include <QFile>
 #include <QGuiApplication>
 #include <QJsonDocument>
+#include <QElapsedTimer>
 #include <QJsonObject>
+#include <QDBusConnection>
+#include <QDBusConnectionInterface>
+#include <QSemaphore>
+#include <QThread>
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QMap>
@@ -26,6 +31,7 @@
 
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <signal.h>
 #include <unistd.h>
 
 #include "arguments.h"
@@ -1777,6 +1783,57 @@ private slots:
     }
 
     // QML calls these from Ctrl+O and Ctrl+S; plain C++ methods it can't.
+    // A portal that owns its name but never answers can't freeze Plain:
+    // asking it, and asking again, return at once.
+    void aHungPortalDoesntFreeze()
+    {
+        if (QStandardPaths::findExecutable("dbus-daemon").isEmpty())
+            QSKIP("needs dbus-daemon for a private bus");
+        QProcess daemon;
+        daemon.start("dbus-daemon", {"--session", "--print-address", "--nofork"});
+        QVERIFY(daemon.waitForReadyRead(5000));
+        const QString address = QString::fromUtf8(daemon.readLine()).trimmed();
+        QDBusConnection bus = QDBusConnection::connectToBus(address, "plain-test");
+        QVERIFY(bus.isConnected());
+
+        // A copy of this test program takes the portal's name, then is
+        // stopped outright, so nothing on its side answers anything.
+        QProcess portal;
+        QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+        environment.insert("PLAIN_HUNG_PORTAL_BUS", address);
+        portal.setProcessEnvironment(environment);
+        portal.start(QCoreApplication::applicationFilePath(), {"hungPortal"});
+        QTRY_VERIFY_WITH_TIMEOUT(bus.interface()->isServiceRegistered("org.freedesktop.portal.Desktop"), 10000);
+        ::kill(portal.processId(), SIGSTOP);
+
+        PortalFilePicker picker(nullptr, bus);
+        QElapsedTimer clock;
+        clock.start();
+        picker.openFile(QDir::tempPath());
+        QVERIFY2(clock.elapsed() < 1000, qPrintable(QString::number(clock.elapsed())));
+        // Asking again replaces the stuck request, promptly too.
+        clock.restart();
+        picker.saveFile(QDir::tempPath() + "/x.conf");
+        QVERIFY2(clock.elapsed() < 1000, qPrintable(QString::number(clock.elapsed())));
+
+        portal.kill();
+        portal.waitForFinished();
+        QDBusConnection::disconnectFromBus("plain-test");
+        daemon.kill();
+        daemon.waitForFinished();
+    }
+
+    // The portal aHungPortalDoesntFreeze stops: run only as its helper.
+    void hungPortal()
+    {
+        const QString address = qEnvironmentVariable("PLAIN_HUNG_PORTAL_BUS");
+        if (address.isEmpty())
+            QSKIP("the hung portal's helper, run by aHungPortalDoesntFreeze");
+        QDBusConnection portal = QDBusConnection::connectToBus(address, "hung-portal");
+        QVERIFY(portal.registerService("org.freedesktop.portal.Desktop"));
+        QThread::sleep(60);
+    }
+
     void filePickerIsCallableFromQml()
     {
         QVERIFY(PortalFilePicker::staticMetaObject.indexOfMethod("openFile(QString)") >= 0);
@@ -1824,6 +1881,30 @@ private slots:
         events->write("configreloaded>>\n");
         events->flush();
         QTRY_COMPARE(theme.radius(), 8);
+    }
+
+    // A reload announced while hyprctl is still answering isn't lost: it
+    // may have read the rounding from before.
+    void aReloadDuringARoundingReadIsKept()
+    {
+        QTemporaryDir dir;
+        write(dir.filePath("rounding"), "4");
+        // Reads the rounding, then takes its time answering.
+        write(dir.filePath("hyprctl"), "#!/bin/sh\nv=$(cat '" + QFile::encodeName(dir.filePath("rounding"))
+                                           + "')\nsleep 0.25\necho \"{\\\"int\\\": $v}\"\n");
+        QFile::setPermissions(dir.filePath("hyprctl"), QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+        QLocalServer hyprland;
+        QVERIFY(hyprland.listen(dir.filePath("events.sock")));
+        QDir(dir.path()).mkpath("state");
+        Theme theme(dir.filePath("state"), nullptr, dir.filePath("hyprctl"), dir.filePath("events.sock"));
+        QTRY_VERIFY(hyprland.hasPendingConnections());
+        QLocalSocket *events = hyprland.nextPendingConnection();
+        // While the first read sleeps on the old value.
+        QTest::qWait(100);
+        write(dir.filePath("rounding"), "8");
+        events->write("configreloaded>>\n");
+        events->flush();
+        QTRY_COMPARE_WITH_TIMEOUT(theme.radius(), 8, 3000);
     }
 
     // The display panel's Text size: the user's override, else the theme's.

@@ -83,6 +83,9 @@ private:
     QString m_hyprctl;
     int m_radius = 0;
     QProcess m_roundingProcess;
+    // Asked again while hyprctl was already running, which may have read the
+    // old rounding: run once more when it finishes.
+    bool m_roundingAgain = false;
     QTimer m_roundingTimeout;
     QLocalSocket m_events;
 };

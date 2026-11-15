@@ -56,7 +56,7 @@ void PortalFilePicker::saveFile(const QString &suggestedPath) {
 
 bool PortalFilePicker::connectToRequestPath(const QString &path) {
     m_pendingPath = path;
-    return QDBusConnection::sessionBus().connect(
+    return m_bus.connect(
         QStringLiteral("org.freedesktop.portal.Desktop"), m_pendingPath,
         QStringLiteral("org.freedesktop.portal.Request"), QStringLiteral("Response"),
         this, SLOT(handleResponse(uint,QVariantMap)));
@@ -65,7 +65,7 @@ bool PortalFilePicker::connectToRequestPath(const QString &path) {
 void PortalFilePicker::closePendingRequest() {
     if (m_pendingPath.isEmpty())
         return;
-    QDBusConnection::sessionBus().send(
+    m_bus.send(
         portalCall(m_pendingPath, QStringLiteral("org.freedesktop.portal.Request"), QStringLiteral("Close")));
 }
 
@@ -79,7 +79,7 @@ void PortalFilePicker::requestFile(const QString &method, const QString &title,
         clearPending();
     }
 
-    QDBusConnection bus = QDBusConnection::sessionBus();
+    QDBusConnection bus = m_bus;
     if (!bus.isConnected()) {
         emit failed(tr("The desktop's file chooser (xdg-desktop-portal) is not available."));
         return;
@@ -136,7 +136,7 @@ void PortalFilePicker::requestFile(const QString &method, const QString &title,
         // handle_token predicts; move our subscription over if so.
         const QString actualPath = reply.value().path();
         if (actualPath != m_pendingPath) {
-            QDBusConnection::sessionBus().disconnect(
+            m_bus.disconnect(
                 QStringLiteral("org.freedesktop.portal.Desktop"), m_pendingPath,
                 QStringLiteral("org.freedesktop.portal.Request"), QStringLiteral("Response"),
                 this, SLOT(handleResponse(uint,QVariantMap)));
@@ -172,7 +172,7 @@ void PortalFilePicker::clearPending() {
         m_pendingWatcher = nullptr;
     }
     if (!m_pendingPath.isEmpty()) {
-        QDBusConnection::sessionBus().disconnect(
+        m_bus.disconnect(
             QStringLiteral("org.freedesktop.portal.Desktop"), m_pendingPath,
             QStringLiteral("org.freedesktop.portal.Request"), QStringLiteral("Response"),
             this, SLOT(handleResponse(uint,QVariantMap)));

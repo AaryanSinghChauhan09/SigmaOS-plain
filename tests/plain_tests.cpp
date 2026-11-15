@@ -1439,6 +1439,46 @@ private slots:
         QTRY_VERIFY(plain.sidebar()->property("treeFocused").toBool());
     }
 
+    // Page Up and Page Down, in the text and in the files.
+    void pageUpAndDownMoveAScreenful()
+    {
+        PlainWindow plain;
+        QByteArray lines;
+        for (int i = 1; i <= 400; ++i)
+            lines += "line " + QByteArray::number(i) + "\n";
+        write(plain.path("root/long.conf"), lines);
+        for (int i = 0; i < 60; ++i)
+            write(plain.path(QString("root/file%1.conf").arg(i, 2, 10, QChar('0'))), "");
+        QVERIFY(plain.load("root/long.conf", ""));
+        QObject *editor = plain.item("editorView");
+        QCOMPARE(editor->property("currentLine").toInt(), 1);
+
+        plain.key(Qt::Key_PageDown);
+        const int afterOne = editor->property("currentLine").toInt();
+        QVERIFY2(afterOne > 10, qPrintable(QString::number(afterOne)));
+        plain.key(Qt::Key_PageDown);
+        QVERIFY(editor->property("currentLine").toInt() > afterOne);
+        QVERIFY(editor->property("firstLine").toInt() > 1);
+        plain.key(Qt::Key_PageUp);
+        QCOMPARE(editor->property("currentLine").toInt(), afterOne);
+        plain.key(Qt::Key_PageUp);
+        QCOMPARE(editor->property("currentLine").toInt(), 1);
+        QVERIFY(!plain.doc.modified());
+
+        plain.key(Qt::Key_B, Qt::ControlModifier);
+        QTRY_VERIFY(plain.sidebar()->property("treeFocused").toBool());
+        // Laid out a frame after it shows.
+        QTRY_VERIFY(plain.item("fileList")->property("height").toReal() > 200);
+        plain.key(Qt::Key_Home);
+        const QString top = plain.sidebar()->property("currentPath").toString();
+        plain.key(Qt::Key_PageDown);
+        const QString paged = plain.sidebar()->property("currentPath").toString();
+        QVERIFY(paged != top);
+        QVERIFY(plain.files.indexOf(paged) > 5);
+        plain.key(Qt::Key_PageUp);
+        QCOMPARE(plain.sidebar()->property("currentPath").toString(), top);
+    }
+
     void anUntitledDocumentNeverAsksForAFile()
     {
         PlainWindow plain;

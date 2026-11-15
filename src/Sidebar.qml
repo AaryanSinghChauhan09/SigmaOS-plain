@@ -154,9 +154,7 @@ Rectangle {
                     positionViewAtIndex(currentIndex, ListView.Contain)
             }
 
-            // Shown whenever there's more, as the editor's: one that shows
-            // while scrolling fades in and out.
-            ScrollBar.vertical: ScrollBar { policy: list.visibleArea.heightRatio < 1 ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff }
+            ScrollBar.vertical: ThinScrollBar { ratio: list.visibleArea.heightRatio }
 
             // Dropped below the rows: into the top folder.
             DropArea {

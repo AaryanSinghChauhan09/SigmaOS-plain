@@ -28,6 +28,21 @@ Item {
 
     function select(start, end) { area.select(start, end) }
 
+    // A screenful down (1) or up (-1), less a line to keep its place: the
+    // view scrolls by it and the cursor moves by it, to the start or end
+    // past the first or last screenful.
+    function page(direction, extend) {
+        const cursor = area.cursorRectangle
+        const step = Math.max(cursor.height, flick.height - cursor.height)
+        flick.contentY = Math.max(0, Math.min(flick.contentHeight - flick.height, flick.contentY + direction * step))
+        const y = cursor.y + cursor.height / 2 + direction * step
+        const position = y < 0 ? 0 : y > area.height ? area.length : area.positionAt(cursor.x, y)
+        if (extend)
+            area.moveCursorSelection(position, TextEdit.SelectCharacters)
+        else
+            area.cursorPosition = position
+    }
+
     function updateVisibleLines() {
         firstLine = editing.lineOf(area.positionAt(0, flick.contentY))
         lastLine = editing.lineOf(area.positionAt(0, flick.contentY + flick.height))
@@ -92,8 +107,8 @@ Item {
         onHeightChanged: view.updateVisibleLines()
 
         // Shown whenever there's more to scroll to, not only while scrolling.
-        ScrollBar.vertical: ScrollBar { policy: flick.visibleArea.heightRatio < 1 ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff }
-        ScrollBar.horizontal: ScrollBar { policy: flick.visibleArea.widthRatio < 1 ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff }
+        ScrollBar.vertical: ThinScrollBar { ratio: flick.visibleArea.heightRatio }
+        ScrollBar.horizontal: ThinScrollBar { ratio: flick.visibleArea.widthRatio }
 
         TextArea.flickable: TextArea {
             id: area
@@ -132,7 +147,18 @@ Item {
             // Keys the editor handles itself. Left alone while an input
             // method is composing, so it can use Enter, Tab and Escape.
             Keys.onPressed: function(event) {
-                if (area.inputMethodComposing || area.readOnly)
+                if (area.inputMethodComposing)
+                    return
+                // Page Up/Down, which TextEdit leaves alone: a screenful,
+                // keeping the cursor at the same place on screen, and
+                // selecting with Shift. Read-only files page too.
+                if ((event.key === Qt.Key_PageUp || event.key === Qt.Key_PageDown)
+                        && !(event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier))) {
+                    view.page(event.key === Qt.Key_PageDown ? 1 : -1, event.modifiers & Qt.ShiftModifier)
+                    event.accepted = true
+                    return
+                }
+                if (area.readOnly)
                     return
                 const plain = !(event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier))
                 if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && plain) {

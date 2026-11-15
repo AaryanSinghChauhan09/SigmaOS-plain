@@ -38,9 +38,16 @@ Popup {
         }
     }
 
+    // Read as the validator reads it: in the language's own digits and
+    // grouping, so 1,000 is line 1000, not 1.
     function go() {
-        const line = parseInt(field.text)
-        if (line > 0) {
+        let line = NaN
+        try {
+            line = Number.fromLocaleString(Qt.locale(), field.text)
+        } catch (error) {
+            return
+        }
+        if (Number.isInteger(line) && line > 0) {
             close()
             accepted(line)
         }

@@ -296,6 +296,9 @@ private slots:
         QVERIFY(!Document::decode("caf\xE9\n").ok);           // Latin-1, not UTF-8
         QVERIFY(!Document::decode("a\rb\n").ok);              // lone CR
         QVERIFY(!Document::decode("a\xEF\xB7\xAF" "b").ok);   // U+FDEF, U+2029's stand-in
+        // U+FDD0 and U+FDD1, which Qt's text document saves as line breaks.
+        QVERIFY(!Document::decode("a\xEF\xB7\x90" "b\n").ok);
+        QVERIFY(!Document::decode("a\xEF\xB7\x91" "b\n").ok);
         QVERIFY(Document::decode("").ok);
         // A sequence cut off at the end, which a stateful decoder holds back
         // without an error, so saving would drop it.
@@ -882,6 +885,9 @@ private slots:
         QVERIFY(!Arguments::parse({"plain", "a", "b"}).error.isEmpty());
         QVERIFY(!Arguments::parse({"plain", "--wait", "a"}).error.isEmpty());
         QVERIFY(Arguments::parse({"plain"}).path.isEmpty());
+        // After --, even a name that looks like a URL is a filename.
+        QCOMPARE(Arguments::parse({"plain", "--", "a://b"}).path, QString("a://b"));
+        QVERIFY(Arguments::parse({"plain", "--", "a://b"}).error.isEmpty());
     }
 
     // The sidebar's files.
@@ -1143,6 +1149,73 @@ private slots:
         QVERIFY(tree.duplicate(dir.filePath("missing")).contains("error"));
     }
 
+    // A link duplicates as a copy of its file, so editing the copy can't
+    // change the original.
+    void duplicatesALinksFileNotTheLink()
+    {
+        QTemporaryDir dir;
+        QDir(dir.path()).mkpath("root");
+        write(dir.filePath("real.lua"), "real\n");
+        QVERIFY(QFile::link(dir.filePath("real.lua"), dir.filePath("root/linked.lua")));
+        QVERIFY(QFile::link(dir.filePath("gone.lua"), dir.filePath("root/dangling.lua")));
+        FileTree tree;
+        tree.setRoot(dir.filePath("root"));
+        const QString copy = tree.duplicate(dir.filePath("root/linked.lua")).value("path").toString();
+        QCOMPARE(copy, QDir::cleanPath(dir.filePath("root/linked copy.lua")));
+        QVERIFY(!QFileInfo(copy).isSymLink());
+        QCOMPARE(read(copy), QByteArray("real\n"));
+        QVERIFY(tree.duplicate(dir.filePath("root/dangling.lua")).contains("error"));
+        // A link to a folder the copy would land in can't copy itself.
+        QVERIFY(QFile::link(dir.filePath("root"), dir.filePath("root/up")));
+        QVERIFY(tree.duplicate(dir.filePath("root/up")).contains("error"));
+        QVERIFY(!QFileInfo::exists(dir.filePath("root/up copy")));
+    }
+
+    // Another file never brings the last one's edits back with Ctrl+Z, even
+    // when its text is the same.
+    void openingAnotherFileForgetsTheUndoHistory()
+    {
+        QQmlEngine engine;
+        QQmlComponent component(&engine);
+        component.setData("import QtQuick\nTextEdit { textFormat: TextEdit.PlainText }", {});
+        std::unique_ptr<QQuickItem> edit(qobject_cast<QQuickItem *>(component.create()));
+        QVERIFY(edit);
+        QTemporaryDir dir;
+        write(dir.filePath("a.conf"), "a");
+        write(dir.filePath("b.lua"), "xa");
+        Document doc;
+        doc.attach(edit.get());
+        QVERIFY(doc.open(dir.filePath("a.conf")));
+        QTextDocument *text = edit->property("textDocument").value<QQuickTextDocument *>()->textDocument();
+        QTextCursor cursor(text);
+        cursor.insertText("x");
+        QCOMPARE(text->toPlainText(), QString("xa"));
+        QVERIFY(doc.open(dir.filePath("b.lua")));
+        QVERIFY(!text->isUndoAvailable());
+        undo(edit.get());
+        QCOMPARE(text->toPlainText(), QString("xa"));
+        QCOMPARE(doc.commentPrefix(), QString("--"));
+    }
+
+    // Escape on "deleted on disk" lets the file go as the banner's close
+    // does: the next save recreates it.
+    void dismissingADeletedFileLetsItGo()
+    {
+        QTemporaryDir dir;
+        write(dir.filePath("x.conf"), "x\n");
+        QTextDocument text;
+        Document doc;
+        doc.attachDocument(&text);
+        QVERIFY(doc.open(dir.filePath("x.conf")));
+        QFile::remove(dir.filePath("x.conf"));
+        QTRY_COMPARE(doc.problem(), QString("DeletedOnDisk"));
+        doc.dismissProblem();
+        QCOMPARE(doc.problem(), QString("None"));
+        append(&text, "y\n");
+        QVERIFY(doc.save());
+        QCOMPARE(read(dir.filePath("x.conf")), QByteArray("x\ny\n"));
+    }
+
     void followsAMovedFile()
     {
         QTemporaryDir dir;
@@ -1213,6 +1286,12 @@ private slots:
             QMouseEvent move(QEvent::MouseMove, at, view.mapToGlobal(at), Qt::NoButton, Qt::LeftButton, {});
             QGuiApplication::sendEvent(&view, &move);
             QTest::qWait(10);
+            // Another program adds a file mid-drag: the list refreshes
+            // under it, and the drag carries on.
+            if (step == 5) {
+                write(dir.filePath("root/z.conf"), "");
+                QTRY_COMPARE(names(tree), QStringList({"folder", "a.conf", "b.conf", "z.conf"}));
+            }
         }
         QTest::mouseRelease(&view, Qt::LeftButton, {}, centerOf(0));
 
@@ -1220,7 +1299,7 @@ private slots:
         QVERIFY(!QFileInfo::exists(dir.filePath("root/a.conf")));
         QCOMPARE(doc.path(), dir.filePath("root/folder/a.conf"));
         QVERIFY(doc.modified());
-        QCOMPARE(names(tree), QStringList({"folder", "a.conf", "b.conf"}));
+        QCOMPARE(names(tree), QStringList({"folder", "a.conf", "b.conf", "z.conf"}));
         QCOMPARE(tree.pathAt(1), QDir::cleanPath(dir.filePath("root/folder/a.conf")));
     }
 
@@ -1576,6 +1655,135 @@ private slots:
         QCOMPARE(area->property("cursorPosition").toInt(), 8);
     }
 
+    // F3 and Shift+F3 step through matches.
+    void f3FindsTheNextMatch()
+    {
+        PlainWindow plain;
+        write(plain.path("root/m.conf"), "x one x two x\n");
+        QVERIFY(plain.load("root/m.conf", ""));
+        auto *area = qobject_cast<QQuickItem *>(plain.item("editorView")->property("area").value<QObject *>());
+        plain.key(Qt::Key_F, Qt::ControlModifier);
+        plain.type("x");
+        plain.key(Qt::Key_Escape);
+        QTRY_VERIFY(plain.editorFocused());
+        area->setProperty("cursorPosition", 0);
+        plain.key(Qt::Key_F3);
+        QCOMPARE(area->property("selectionStart").toInt(), 0);
+        plain.key(Qt::Key_F3);
+        QCOMPARE(area->property("selectionStart").toInt(), 6);
+        plain.key(Qt::Key_F3, Qt::ShiftModifier);
+        QCOMPARE(area->property("selectionStart").toInt(), 0);
+    }
+
+    // A change in a shown folder, like saving the open file, keeps the
+    // files where they were scrolled to.
+    void savingKeepsTheFilesScrolled()
+    {
+        PlainWindow plain;
+        for (int i = 0; i < 80; ++i)
+            write(plain.path(QString("root/f%1.conf").arg(i, 2, 10, QChar('0'))), "");
+        QVERIFY(plain.load("root/f79.conf", ""));
+        plain.key(Qt::Key_B, Qt::ControlModifier);
+        QTRY_VERIFY(plain.item("fileList")->property("height").toReal() > 200);
+        QObject *list = plain.item("fileList");
+        // Scrolled down to the open file, the last of 82 rows.
+        auto top = [&] { return list->property("originY").toReal() - list->property("topMargin").toReal(); };
+        QTRY_VERIFY(list->property("contentY").toReal() > top() + 500);
+        const qreal scrolled = list->property("contentY").toReal();
+        plain.key(Qt::Key_Tab, Qt::ControlModifier);
+        plain.type("x");
+        plain.key(Qt::Key_S, Qt::ControlModifier);
+        QTRY_COMPARE(read(plain.path("root/f79.conf")), QByteArray("x"));
+        // Past the watcher's pause, the rows refresh in place.
+        QTest::qWait(400);
+        QCOMPARE(list->property("contentY").toReal(), scrolled);
+        QCOMPARE(plain.sidebar()->property("currentPath").toString(), plain.path("root/f79.conf"));
+    }
+
+    // A reload from disk doesn't reopen folders or move the keys.
+    void aReloadLeavesTheFilesAlone()
+    {
+        PlainWindow plain;
+        QDir(plain.path("root")).mkpath("sub");
+        write(plain.path("root/sub/c.conf"), "c\n");
+        // Opened from the files, a folder up: sub, a.conf, b.conf.
+        QVERIFY(plain.load("", "root"));
+        QTRY_VERIFY(plain.sidebar()->property("treeFocused").toBool());
+        plain.key(Qt::Key_Right);
+        plain.key(Qt::Key_Down);
+        plain.key(Qt::Key_Return);
+        QTRY_COMPARE(plain.doc.path(), plain.path("root/sub/c.conf"));
+        const int sub = plain.files.indexOf(plain.path("root/sub"));
+        QVERIFY(plain.files.isExpanded(sub));
+        plain.key(Qt::Key_Tab, Qt::ControlModifier);
+        QTRY_VERIFY(plain.sidebar()->property("treeFocused").toBool());
+        plain.key(Qt::Key_Left);
+        plain.key(Qt::Key_Left);
+        QVERIFY(!plain.files.isExpanded(sub));
+        replace(plain.path("root/sub/c.conf"), "changed\n");
+        QTRY_COMPARE(plain.doc.textDocument()->toPlainText(), QString("changed\n"));
+        QTest::qWait(300);
+        QVERIFY(!plain.files.isExpanded(plain.files.indexOf(plain.path("root/sub"))));
+        QCOMPARE(plain.sidebar()->property("currentPath").toString(), plain.path("root/sub"));
+    }
+
+    // The shortcuts take the keys while they show: typing changes nothing.
+    void theShortcutsTakeTheKeys()
+    {
+        PlainWindow plain;
+        QVERIFY(plain.load("root/b.conf", ""));
+        plain.key(Qt::Key_F1);
+        QVERIFY(plain.item("help")->property("visible").toBool());
+        plain.type("q");
+        plain.key(Qt::Key_PageDown);
+        QVERIFY(!plain.doc.modified());
+        plain.key(Qt::Key_F1);
+        QVERIFY(!plain.item("help")->property("visible").toBool());
+        QTRY_VERIFY(plain.editorFocused());
+
+        // A shortcut that takes the keys elsewhere closes it, rather than
+        // leaving it up with typing reaching the text behind.
+        plain.key(Qt::Key_B, Qt::ControlModifier);
+        QTRY_VERIFY(plain.sidebar()->property("treeFocused").toBool());
+        plain.key(Qt::Key_F1);
+        QVERIFY(plain.item("help")->property("visible").toBool());
+        plain.key(Qt::Key_B, Qt::ControlModifier);
+        QTRY_VERIFY(plain.editorFocused());
+        QVERIFY(!plain.item("help")->property("visible").toBool());
+        plain.type("q");
+        QVERIFY(plain.doc.modified());
+    }
+
+    // Go to line reads numbers as the language writes them.
+    void goToLineReadsGroupedNumbers()
+    {
+        PlainWindow plain;
+        write(plain.path("root/long.conf"), QByteArray(1200, '\n'));
+        QVERIFY(plain.load("root/long.conf", ""));
+        plain.key(Qt::Key_G, Qt::ControlModifier);
+        plain.type("1,000");
+        plain.key(Qt::Key_Return);
+        QTRY_COMPARE(plain.item("editorView")->property("currentLine").toInt(), 1000);
+    }
+
+    // Cancelling the unsaved question gives the keys back to the files when
+    // a file was picked there.
+    void cancellingTheUnsavedQuestionGoesBack()
+    {
+        PlainWindow plain;
+        QVERIFY(plain.load("root/b.conf", ""));
+        plain.type("x");
+        plain.key(Qt::Key_B, Qt::ControlModifier);
+        QTRY_VERIFY(plain.sidebar()->property("treeFocused").toBool());
+        plain.key(Qt::Key_A);
+        plain.key(Qt::Key_Return);
+        QTRY_VERIFY(plain.item("unsaved")->property("opened").toBool());
+        plain.key(Qt::Key_Escape);
+        QTRY_VERIFY(!plain.item("unsaved")->property("opened").toBool());
+        QTRY_VERIFY(plain.sidebar()->property("treeFocused").toBool());
+        QCOMPARE(plain.doc.path(), plain.path("root/b.conf"));
+    }
+
     void anUntitledDocumentNeverAsksForAFile()
     {
         PlainWindow plain;
@@ -1764,6 +1972,29 @@ private slots:
         QCOMPARE(text(), QString("a = 1\nb = 2\n"));
         undo();
         QCOMPARE(text(), QString("a = 1\n    b = 2\n"));
+
+        // In CSS, a line that only opens with an inline comment isn't
+        // commented: it's wrapped whole, and unwrapped back.
+        {
+            const QString css = dir.filePath("t.css");
+            write(css, "/* bar */ .bar { color: red; }\n");
+            QVERIFY(doc.open(css));
+            editing.toggleComment(0, 0);
+            // The */ inside is escaped, so the whole line is one comment.
+            QCOMPARE(text(), QString("/* /* bar *\\/ .bar { color: red; } */\n"));
+            const QString commented = text().trimmed();
+            QCOMPARE(Highlighter::tokens("css", {commented}), QString(commented.size(), 'c'));
+            editing.toggleComment(0, 0);
+            QCOMPARE(text(), QString("/* bar */ .bar { color: red; }\n"));
+            // A *\/ that was already there comes back as it was.
+            write(css, ".x::after { content: \"*\\/ and */\"; }\n");
+            QVERIFY(doc.open(css));
+            editing.toggleComment(0, 0);
+            QCOMPARE(Highlighter::tokens("css", {text().trimmed()}), QString(text().trimmed().size(), 'c'));
+            editing.toggleComment(0, 0);
+            QCOMPARE(text(), QString(".x::after { content: \"*\\/ and */\"; }\n"));
+            QVERIFY(doc.open(path));
+        }
 
         // Enter keeps the indentation.
         const int end = text().indexOf("2") + 1;
@@ -2130,6 +2361,7 @@ private:
             context->setContextProperty("startPath", file.isEmpty() ? QString() : path(file));
             context->setContextProperty("startLine", 0);
             context->setContextProperty("startFolder", folder.isEmpty() ? QString() : path(folder));
+            context->setContextProperty("homePath", QDir::homePath());
             engine.load(QUrl::fromLocalFile(sourceFolder() + "/Main.qml"));
             if (engine.rootObjects().isEmpty())
                 return false;

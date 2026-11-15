@@ -47,6 +47,9 @@ Rectangle {
         if (row >= 0) {
             list.currentIndex = row
             list.positionViewAtIndex(row, ListView.Contain)
+            // Again once laid out: just shown, the list has no height yet
+            // to scroll a row near the end into.
+            Qt.callLater(() => { if (list.currentIndex >= 0) list.positionViewAtIndex(list.currentIndex, ListView.Contain) })
         }
     }
 
@@ -120,12 +123,22 @@ Rectangle {
 
     Connections {
         target: doc
-        function onFileChanged() { if (sidebar.visible) sidebar.reveal(doc.path) }
+        // Only when it's another file: a reload from disk mustn't reopen
+        // folders or move the keys.
+        property string shown: ""
+        function onFileChanged() {
+            if (doc.path !== shown && sidebar.visible)
+                sidebar.reveal(doc.path)
+            shown = doc.path
+        }
     }
 
     Connections {
         target: files
         function onRefreshed() {
+            // A drag whose file has gone has nothing left to drop.
+            if (dragProxy.Drag.active && files.indexOf(dragProxy.path) < 0)
+                dragProxy.Drag.active = false
             const row = files.indexOf(sidebar.currentPath)
             list.currentIndex = row >= 0 ? row : Math.min(list.currentIndex, list.count - 1)
         }

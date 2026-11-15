@@ -1,6 +1,7 @@
 // plain — Omarchy's text editor for config files: conventional keys, the
 // theme's colors, and saves that never damage a file.
 
+#include <QDir>
 #include <QFileInfo>
 #include <QFont>
 #include <QGuiApplication>
@@ -95,6 +96,7 @@ int main(int argc, char *argv[]) {
     engine.rootContext()->setContextProperty("launcher", &launcher);
     engine.rootContext()->setContextProperty("startPath", startPath);
     engine.rootContext()->setContextProperty("startFolder", startFolder);
+    engine.rootContext()->setContextProperty("homePath", QDir::homePath());
     engine.rootContext()->setContextProperty("startLine", arguments.line);
     engine.load(QUrl("qrc:/Main.qml"));
     if (engine.rootObjects().isEmpty())

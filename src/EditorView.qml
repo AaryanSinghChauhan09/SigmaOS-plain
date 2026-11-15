@@ -28,19 +28,29 @@ Item {
 
     function select(start, end) { area.select(start, end) }
 
-    // A screenful down (1) or up (-1), less a line to keep its place: the
-    // view scrolls by it and the cursor moves by it, to the start or end
-    // past the first or last screenful.
+    // Where paging left the cursor, and the column it pages in: kept across
+    // Page Up and Down, so a short line on the way doesn't lose it, and
+    // forgotten once the cursor moves some other way.
+    property int pagedTo: -1
+    property real pageX: 0
+
+    // A screenful down (1) or up (-1) in whole lines, less one to keep its
+    // place: the view scrolls by it and the cursor moves by it, so the
+    // cursor stays where it was on screen; past the first or last
+    // screenful, it goes to the start or end.
     function page(direction, extend) {
         const cursor = area.cursorRectangle
-        const step = Math.max(cursor.height, flick.height - cursor.height)
+        if (area.cursorPosition !== pagedTo)
+            pageX = cursor.x
+        const step = Math.max(1, Math.floor(flick.height / cursor.height) - 1) * cursor.height
         flick.contentY = Math.max(0, Math.min(flick.contentHeight - flick.height, flick.contentY + direction * step))
         const y = cursor.y + cursor.height / 2 + direction * step
-        const position = y < 0 ? 0 : y > area.height ? area.length : area.positionAt(cursor.x, y)
+        const position = y < 0 ? 0 : y > area.height ? area.length : area.positionAt(pageX, y)
         if (extend)
             area.moveCursorSelection(position, TextEdit.SelectCharacters)
         else
             area.cursorPosition = position
+        pagedTo = area.cursorPosition
     }
 
     function updateVisibleLines() {
@@ -92,6 +102,7 @@ Item {
 
     Flickable {
         id: flick
+        objectName: "editorFlick"
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.left: gutter.right

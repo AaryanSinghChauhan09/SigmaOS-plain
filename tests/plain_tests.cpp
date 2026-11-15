@@ -1479,6 +1479,40 @@ private slots:
         QCOMPARE(plain.sidebar()->property("currentPath").toString(), top);
     }
 
+    // Paging keeps its column across a short line, and its place on screen.
+    void pagingKeepsItsColumnAndPlace()
+    {
+        PlainWindow plain;
+        // Every line but the first empty, so a page always lands on one.
+        QByteArray lines = "0123456789\n" + QByteArray(300, '\n');
+        write(plain.path("root/long.conf"), lines);
+        QVERIFY(plain.load("root/long.conf", ""));
+        QObject *editor = plain.item("editorView");
+        auto *area = qobject_cast<QQuickItem *>(editor->property("area").value<QObject *>());
+        for (int i = 0; i < 8; ++i)
+            plain.key(Qt::Key_Right);
+        QCOMPARE(area->property("cursorPosition").toInt(), 8);
+
+        // Down twice, then up twice: back to the same column, wherever the
+        // pages landed on the way.
+        QObject *flick = plain.item("editorFlick");
+        auto onScreen = [&] { return area->property("cursorRectangle").toRectF().y() - flick->property("contentY").toReal(); };
+        plain.key(Qt::Key_PageDown);
+        const int line = editor->property("currentLine").toInt();
+        const qreal place = onScreen();
+        // The cursor keeps its place on screen, page after page.
+        for (int i = 0; i < 3; ++i) {
+            plain.key(Qt::Key_PageDown);
+            QCOMPARE(onScreen(), place);
+        }
+        QVERIFY(editor->property("currentLine").toInt() > line);
+        plain.key(Qt::Key_PageUp);
+        plain.key(Qt::Key_PageUp);
+        plain.key(Qt::Key_PageUp);
+        plain.key(Qt::Key_PageUp);
+        QCOMPARE(area->property("cursorPosition").toInt(), 8);
+    }
+
     void anUntitledDocumentNeverAsksForAFile()
     {
         PlainWindow plain;

@@ -22,6 +22,10 @@ Rectangle {
     property real preferredWidth: 232
     // The row the keys are on, kept by path across a refresh from disk.
     property string currentPath: ""
+    readonly property bool treeFocused: list.activeFocus
+    // Letters typed in the tree, to jump to the name they start; forgotten
+    // after a pause.
+    property string typed: ""
 
     color: theme.darkBackground
 
@@ -60,15 +64,36 @@ Rectangle {
         reveal(to)
     }
 
-    function activate(row) {
+    // A folder folds open or closed; a file opens. Opened with Space, the
+    // keys stay in the tree to look at the next one.
+    function activate(row, stay) {
         if (row < 0)
             return
         list.currentIndex = row
-        if (files.isFolder(row))
+        if (files.isFolder(row)) {
             files.toggle(row)
-        else
+            focusTree()
+        } else {
             sidebar.openRequested(files.pathAt(row))
+            if (stay)
+                Qt.callLater(focusTree)
+        }
     }
+
+    function jumpTo(text) {
+        typed = typed + text.toLowerCase()
+        typingPause.restart()
+        // A first letter looks past the row the keys are on, so pressing it
+        // again steps through the names it starts.
+        const start = typed.length === 1 ? list.currentIndex + 1 : list.currentIndex
+        const row = files.find(typed, start)
+        if (row >= 0) {
+            list.currentIndex = row
+            list.positionViewAtIndex(row, ListView.Contain)
+        }
+    }
+
+    Timer { id: typingPause; interval: 800; onTriggered: sidebar.typed = "" }
 
     Connections {
         target: doc
@@ -126,12 +151,21 @@ Rectangle {
                         files.collapse(row)
                     else if (files.parentOf(row) >= 0)
                         list.currentIndex = files.parentOf(row)
-                } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
-                    sidebar.activate(row)
+                } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                    sidebar.activate(row, false)
+                } else if (event.key === Qt.Key_Space) {
+                    sidebar.typed = ""
+                    sidebar.activate(row, true)
                 } else if (event.key === Qt.Key_Home) {
                     list.currentIndex = 0
                 } else if (event.key === Qt.Key_End) {
                     list.currentIndex = list.count - 1
+                } else if (event.key === Qt.Key_PageUp || event.key === Qt.Key_PageDown) {
+                    const page = Math.max(1, Math.floor(list.height / Math.round(theme.textSize * 2)) - 1)
+                    list.currentIndex = Math.max(0, Math.min(list.count - 1, row + (event.key === Qt.Key_PageUp ? -page : page)))
+                } else if (event.text.length > 0 && event.text.trim().length > 0
+                           && !(event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier))) {
+                    sidebar.jumpTo(event.text)
                 } else if (event.key === Qt.Key_Delete && row >= 0) {
                     sidebar.deleteRequested(row)
                 } else if (event.key === Qt.Key_Escape) {
@@ -163,6 +197,9 @@ Rectangle {
 
                 Rectangle {
                     anchors.fill: parent
+                    // Where the keys are, while they're in the tree.
+                    border.width: row.ListView.isCurrentItem && list.activeFocus ? 1 : 0
+                    border.color: theme.accent
                     color: drop.containsDrag ? win.tint(theme.accent, 0.3)
                          : row.open ? win.tint(theme.accent, 0.22)
                          : row.ListView.isCurrentItem && list.activeFocus ? win.tint(theme.foreground, 0.08)
@@ -239,7 +276,7 @@ Rectangle {
                     id: hover
                     anchors.fill: parent
                     hoverEnabled: true
-                    onClicked: sidebar.activate(row.index)
+                    onClicked: sidebar.activate(row.index, false)
 
                     // Dragged onto a folder (or a file in one) to move there.
                     drag.target: dragProxy

@@ -31,6 +31,7 @@ Plain runs in the foreground and exits when its window closes, so it works as `$
 The sidebar shows a folder's files: the folder Plain was opened on, or the open file's. It's hidden until Ctrl+B or the icon at the left of the footer shows it, and opening Plain on a folder starts with it shown. Folders come first, dotfiles stay out of the way, and the list follows the disk as files come and go.
 
 - **Click a file, or Enter on it**, to open it. Unsaved changes are asked about first, as with Ctrl+O.
+- **Keys**: Ctrl+B shows the files with the keys on the open file, and hides them again; Ctrl+Tab hops between files and text, to keep the files open while editing. In the files, Up/Down, Page Up/Down, Home and End move; Right and Left open and close folders; typing a name's first letters jumps to it; Enter opens a file and goes to the text, Space opens it and stays; Escape goes back to the text.
 - **Drag a file or folder onto a folder** to move it there. The open file follows, edits and all.
 - **Ctrl+N** names a new file where the sidebar's keys are and opens it; **Ctrl+Shift+N** names a new folder. Without the sidebar, Ctrl+N opens a new window.
 - **Delete** asks, then moves the file or folder to the trash, so it can be had back.
@@ -44,8 +45,8 @@ The sidebar shows a folder's files: the folder Plain was opened on, or the open 
 | Ctrl+O | Open |
 | Ctrl+N | New file (with files shown) or new window |
 | Ctrl+Shift+N | New folder |
-| Ctrl+B | Show or hide files |
-| Ctrl+Shift+E | Go to files: arrows move, Right/Left unfold/fold, Enter opens, Escape goes back to the text |
+| Ctrl+B | Show files, with the keys in them, or hide them |
+| Ctrl+Tab | Between the files and the text, while the files show |
 | Delete | Move the picked file to the trash, after asking |
 | Ctrl+Z / Ctrl+Shift+Z | Undo / redo |
 | Ctrl+F | Find |

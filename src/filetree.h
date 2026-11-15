@@ -38,6 +38,9 @@ public:
     Q_INVOKABLE bool isFolder(int row) const;
     Q_INVOKABLE bool isExpanded(int row) const;
     Q_INVOKABLE QString pathAt(int row) const;
+    // The first row from `from` on, around past the end, whose name starts
+    // with `prefix` in any case; -1 when none does.
+    Q_INVOKABLE int find(const QString &prefix, int from) const;
     // Moves a row's file or folder to the trash, so a delete can be undone
     // from the file manager. Empty when it went, or why it didn't.
     Q_INVOKABLE QString trash(int row);

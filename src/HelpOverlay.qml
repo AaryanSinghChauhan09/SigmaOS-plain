@@ -17,7 +17,7 @@ Rectangle {
         ["Ctrl + N", qsTr("New file, or new window")],
         ["Ctrl + Shift + N", qsTr("New folder")],
         ["Ctrl + B", qsTr("Show or hide files")],
-        ["Ctrl + Shift + E", qsTr("Go to files")],
+        ["Ctrl + Tab", qsTr("Between files and text")],
         ["Delete", qsTr("Delete from files")],
         ["Ctrl + Z / Ctrl + Shift + Z", qsTr("Undo / redo")],
         ["Ctrl + F", qsTr("Find")],

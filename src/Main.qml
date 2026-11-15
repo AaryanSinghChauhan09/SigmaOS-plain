@@ -152,8 +152,17 @@ ApplicationWindow {
     Shortcut { sequences: ["Ctrl+=", "Ctrl++"]; context: Qt.ApplicationShortcut; onActivated: if (win.textSize < 48) settings.zoom += 1 }
     Shortcut { sequence: "Ctrl+-"; context: Qt.ApplicationShortcut; onActivated: if (win.textSize > 8) settings.zoom -= 1 }
     Shortcut { sequence: "Ctrl+0"; context: Qt.ApplicationShortcut; onActivated: settings.zoom = 0 }
-    Shortcut { sequence: "Ctrl+B"; context: Qt.ApplicationShortcut; onActivated: win.sidebarVisible ? win.hideSidebar() : win.showSidebar(false) }
-    Shortcut { sequence: "Ctrl+Shift+E"; context: Qt.ApplicationShortcut; onActivated: win.showSidebar(true) }
+    // The keys go with the files: shown, they're in the tree on the open
+    // file; hidden, they're back in the text. Ctrl+Tab hops between the two
+    // to keep the files open while editing, and Escape in the tree goes
+    // back to the text.
+    Shortcut { sequence: "Ctrl+B"; context: Qt.ApplicationShortcut; onActivated: win.sidebarVisible ? win.hideSidebar() : win.showSidebar(true) }
+    Shortcut {
+        sequence: "Ctrl+Tab"
+        context: Qt.ApplicationShortcut
+        enabled: win.sidebarVisible
+        onActivated: sidebar.treeFocused ? editor.focusText() : sidebar.focusTree()
+    }
     // With the files showing, a new file named in place where they're at;
     // otherwise another window, since this one holds one file.
     Shortcut {
@@ -272,7 +281,7 @@ ApplicationWindow {
                 Footer {
                     Layout.fillWidth: true
                     sidebarButton: !win.sidebarVisible
-                    onSidebarRequested: win.showSidebar(false)
+                    onSidebarRequested: win.showSidebar(true)
                     onSaveRequested: win.save()
                     onOpenRequested: win.request("open")
                     onHelpRequested: win.helpVisible = !win.helpVisible

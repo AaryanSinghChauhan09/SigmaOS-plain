@@ -928,6 +928,21 @@ private slots:
         QCOMPARE(tree.reveal(dir.filePath("a/missing.conf")), -1);
     }
 
+    void findsNamesByTheirStart()
+    {
+        QTemporaryDir dir;
+        for (const char *name : {"autostart.lua", "bindings.lua", "Bluetooth.conf", "input.lua"})
+            write(dir.filePath(name), "");
+        FileTree tree;
+        tree.setRoot(dir.path());
+        QCOMPARE(tree.find("b", 0), 1);
+        QCOMPARE(tree.find("b", 2), 2);
+        // Around past the end, and in any case.
+        QCOMPARE(tree.find("B", 3), 1);
+        QCOMPARE(tree.find("blu", 0), 2);
+        QCOMPARE(tree.find("z", 0), -1);
+    }
+
     void followsTheFolderOnDisk()
     {
         QTemporaryDir dir;

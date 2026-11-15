@@ -260,3 +260,13 @@ QVariantMap FileTree::create(const QString &folder, const QString &name, bool is
     rebuild();
     return {{"path", path}};
 }
+
+int FileTree::find(const QString &prefix, int from) const {
+    const int count = int(m_rows.size());
+    for (int i = 0; i < count; ++i) {
+        const int row = ((from + i) % count + count) % count;
+        if (m_rows.at(row).name.startsWith(prefix, Qt::CaseInsensitive))
+            return row;
+    }
+    return -1;
+}

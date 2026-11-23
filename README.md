@@ -1,4 +1,6 @@
-# Plain
+# Sigmaos Plain
+
+> Forked from omacom (MIT). See `SIGMAOS_FORK.md`.
 
 ![Plain editing hypr/bindings.lua, its folder's files beside it](docs/plain.png)
 

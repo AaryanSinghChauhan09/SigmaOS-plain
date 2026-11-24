@@ -68,7 +68,7 @@ Text starts at the desktop's text size and follows it. The size you set with Ctr
 
 ## Install
 
-SigmaOS installs Plain as the `plain` package: `omarchy-pkg-add plain`.
+SigmaOS installs Plain as the `plain` package: `sigmaos-pkg-add plain`.
 
 ## Build
 

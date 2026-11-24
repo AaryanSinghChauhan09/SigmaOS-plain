@@ -1,10 +1,10 @@
 # Sigmaos Plain
 
-> Forked from omacom (MIT). See `SIGMAOS_FORK.md`.
+> Forked from SigmaOS (MIT). See `SIGMAOS_FORK.md`.
 
 ![Plain editing hypr/bindings.lua, its folder's files beside it](docs/plain.png)
 
-Plain is Omarchy's text editor for config files: the editor you don't have to learn. Ctrl+S saves, Ctrl+Z undoes, Ctrl+F finds, and the window closes like any other. It follows Omarchy's theme, font and language, colors Lua, hyprlang/INI, TOML, JSON, YAML, shell and CSS in the theme's palette, and keeps to one window and one file, with the folder's files beside it when you want them.
+Plain is SigmaOS's text editor for config files: the editor you don't have to learn. Ctrl+S saves, Ctrl+Z undoes, Ctrl+F finds, and the window closes like any other. It follows SigmaOS's theme, font and language, colors Lua, hyprlang/INI, TOML, JSON, YAML, shell and CSS in the theme's palette, and keeps to one window and one file, with the folder's files beside it when you want them.
 
 <table>
   <tr>
@@ -68,7 +68,7 @@ Text starts at the desktop's text size and follows it. The size you set with Ctr
 
 ## Install
 
-Omarchy installs Plain as the `plain` package: `omarchy-pkg-add plain`.
+SigmaOS installs Plain as the `plain` package: `omarchy-pkg-add plain`.
 
 ## Build
 

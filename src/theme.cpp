@@ -42,10 +42,10 @@ double luminance(const QColor &c) {
 
 Theme::Theme(const QString &directory, QObject *parent, const QString &hyprctl, const QString &hyprlandEvents)
     : QObject(parent),
-      m_directory(directory.isEmpty() ? QDir::homePath() + "/.local/state/omarchy/current" : directory),
-      // `omarchy display text size` writes the user's override here; tests
+      m_directory(directory.isEmpty() ? QDir::homePath() + "/.local/state/sigmaos/current" : directory),
+      // `sigmaos display text size` writes the user's override here; tests
       // keep theirs beside the theme directory.
-      m_shellConfig(directory.isEmpty() ? QDir::homePath() + "/.config/omarchy/shell.toml"
+      m_shellConfig(directory.isEmpty() ? QDir::homePath() + "/.config/sigmaos/shell.toml"
                                         : directory + "/shell.toml") {
     m_debounce.setSingleShot(true);
     m_debounce.setInterval(80);

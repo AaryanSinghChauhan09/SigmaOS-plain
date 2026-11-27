@@ -458,7 +458,7 @@ QString Highlighter::languageFor(const QString &path, const QString &firstLine) 
     static const QSet<QString> shellNames{".bashrc", ".bash_profile", ".bash_logout", ".profile", ".zshrc",
                                           ".zprofile", ".zshenv", "bashrc", "envs", "pkgbuild", ".xprofile"};
     static const QSet<QString> confNames{"config", ".gitconfig", "gitconfig", ".editorconfig", "inputrc",
-                                         ".inputrc", "mimeapps.list", "user-dirs.dirs", ".env", "makepkg.conf"};
+                                         ".inputrc", "mimeapps.list", "user-dirs.dirs", ".env", "sigma-build.conf"};
     if (shellNames.contains(name))
         return "shell";
     if (confNames.contains(name))
